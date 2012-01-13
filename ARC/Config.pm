@@ -1,20 +1,27 @@
 # ---------------------------------------------------------------------------
 # $Id$
 # 
-# load and save of config files for KIM
+# load and save Perl module style config files in the style of the CPAN
+# module's ~/.cpan/CPAN/MyConfig.pm config file.
 #
-# load() and save() are generic - they load and save perl objects and are
-# not exported.  load_config() and save_config() are specific to kim's
-# main configuration. -- NOTE: they have moved back into kim's main executable
+# load() and save() are not exported since the names are too generic.
+# You can use them with a fully qualified name: 
+#
+#   ARC::Config::load($file)
+#
+# or, you can choose to import them using:
+#
+#   use ARC::Config qw(load save);
+#
 # ---------------------------------------------------------------------------
 
-package KIM::Config;
+package ARC::Config;
 require Exporter;
 
 # export functions and variables
 our @ISA = qw(Exporter);
-#our @EXPORT = qw(load_config save_config);
-our @EXPORT = qw(load save);
+#our @EXPORT = qw(load save);
+our @EXPORT_OK = qw(load save);
 
 use strict;
 use warnings;
@@ -26,47 +33,6 @@ sub save_config($$);
 sub load($);
 sub save($$;$$);
 
-# ---------------------------------------------------------------------------
-# this has stuff specific to kim's main configuration file kim.conf
-# ---------------------------------------------------------------------------
-sub load_config($) {
-   load(shift);
-   #unless ( %{ $KIM::Config::CONFIG } ) {    # if CONFIG is hash ref
-   unless ( %KIM::Config::CONFIG ) {         # if CONFIG is hash
-      die("ERROR: Unknown problem loading config file\n");
-   }
-   #my $ref = $KIM::Config::CONFIG;      # if CONFIG is hash ref
-   my $ref = \%KIM::Config::CONFIG;     # if CONFIG is hash
-
-   # check for KIM_BASEDIR. Add it from the environment if it doesn't exist
-   if ( ! exists($ref->{conf}{KIM_BASEDIR}) ) {
-      $ref->{conf}{KIM_BASEDIR} = $ENV{KIM_BASEDIR};
-   }
-   
-   #return(%KIM::Config::CONFIG);    # if CONFIG is hash ref
-   return(%KIM::Config::CONFIG);    # if CONFIG is hash
-}
-
-
-# ---------------------------------------------------------------------------
-# has kim specific stuff
-sub save_config($$) {
-   my ($file, $config) = @_;
-
-   my $now = `date`; chomp($now);
-   my $header = <<EOF;
-# ###########################################################################
-# KIM config file for jobid: $config->{KIM_JOBID}
-# Contains options from $config->{KIM_BASEDIR}/conf/kim.conf
-# as well as dynamically generated parameters
-# saved at: $now
-# ###########################################################################
-
-EOF
-
-   #save(@_, $header);
-   save($file, [$config], ['CONFIG'], $header);
-}
 
 # ---------------------------------------------------------------------------
 # load a config file which is a perl module, in the style of CPAN's MyConfig.pm
@@ -90,7 +56,7 @@ EOF
 #   );
 #
 #   # define a hash ref in seperate namespace
-#   $KIM::Output::CONFIG = {
+#   $ARC::Output::CONFIG = {
 #     'output_dir'   => '/tmp',
 #     'log_file'     => 'kim.log',
 #     'log_level'    => {
@@ -104,11 +70,11 @@ EOF
 # Now, once load_config($file) has been called, the calling program can
 # reference it's config like this:
 #
-#   %scores = %KIM::Config::SCORES;
+#   %scores = %ARC::Config::SCORES;
 #   print $scores{name} . "'s scores: " . join(",", $scores{scores}) . "\n";
 #
-#   if ( $KIM::Output::CONFIG->{save_state} =~ m/TRUE/i ) {
-#      %conf = %{ $KIM::Output::CONFIG };  # dereference the hash ref
+#   if ( $ARC::Output::CONFIG->{save_state} =~ m/TRUE/i ) {
+#      %conf = %{ $ARC::Output::CONFIG };  # dereference the hash ref
 #      print "Output dir: " . $conf{output_dir} . ", Log Level for 'warn': " . $conf{log_level}{warn} . "\n";
 #   }
 #
