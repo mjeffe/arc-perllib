@@ -12,8 +12,8 @@ require Exporter;
 
 # export functions and variables
 our @ISA = qw(Exporter);
-#our @EXPORT = qw(load save);
-our @EXPORT_OK = qw(say dbg zpad get_datetime_str rr lotto);
+our @EXPORT = qw(say dbg zpad get_datetime_str rr lotto);
+#our @EXPORT_OK = qw(say dbg zpad get_datetime_str rr lotto);
 
 use strict;
 use warnings;
@@ -25,6 +25,12 @@ sub zpad($$;$);
 sub rr($$);
 sub get_datetim_str();
 sub lotto();
+
+# See note in say() about this!
+our $verbose = 0;
+
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -44,13 +50,16 @@ sub dbg($$;$) {
 # parm1: verbose level at which this message is printed
 # Parm2: string to print
 # parm3: number of spaces to indent
+#
+# NOTE: You should set ARC::Common::verbose from the calling application before
+# calling this (or the dbg) function!
 # ---------------------------------------------------------------------------
 sub say($$;$) {
    my $lvl = shift;
    my $msg = shift;
    my $indent = shift || 0;
 
-   if ( $lvl <= $opts{verbose} ) {
+   if ( $lvl <= $verbose ) {
       print STDOUT " " x $indent . "$msg";
    }
 }
@@ -94,7 +103,7 @@ sub get_datetime_str() {
    # since I roll-my-own, I had better validate
    my $str = "${year}${mon}${mday}_${hour}${min}${sec}";
    if ( length($str) != 15 ) {
-      die("$E: problem in get_datetime_str()\n");
+      die("ERROR: problem in ARC::Common::get_datetime_str()\n");
    }
 
    return $str;
