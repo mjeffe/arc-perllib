@@ -12,8 +12,8 @@ require Exporter;
 
 # export functions and variables
 our @ISA = qw(Exporter);
-our @EXPORT = qw(say dbg zpad get_datetime_str rr lotto);
-#our @EXPORT_OK = qw(say dbg zpad get_datetime_str rr lotto);
+our @EXPORT = qw(say dbg zpad get_datetime_str rr lotto open_ro_file close_file system_call get_record);
+#our @EXPORT_OK = qw();
 
 use strict;
 use warnings;
@@ -25,11 +25,76 @@ sub zpad($$;$);
 sub rr($$);
 sub get_datetim_str();
 sub lotto();
+sub open_ro_file($);
+sub close_file($);
+sub system_call($$);
+sub get_record($);
 
-# See note in say() about this!
-our $verbose = 0;
+# can (and should) be set by any 'use'er of this module
+our $verbose = 0;     # See note in say() about this!
+our $E = 'ERROR';
 
 
+# ---------------------------------------------------------------------------
+# grabs one line from the open file handle
+# expects an open filehandle parameter
+# not recommended for reading an entire file, but useful for grabbing the header row
+# ---------------------------------------------------------------------------
+sub get_record($) {
+   my ($fh) = @_;
+   die("$E: get_record() called with an invalid file handle\n") if ( ! fileno($fh) );
+   chomp(my $record = <$fh>);
+   return $record;
+}
+
+
+# ---------------------------------------------------------------------------
+#  Run system command
+# ---------------------------------------------------------------------------
+sub system_call($$) {
+   my ($cmd, $app) = @_;
+
+   dbg(3, "CMD: $cmd\n");
+   my $rc = system($cmd);
+   if ( ($rc >>= 8) != 0 ) {
+      die("$E: $app failed with return code $?: $!\n");
+   }
+}
+
+
+
+# ---------------------------------------------------------------------------
+# open file and return reference to file handle.
+# can handle compressed files.
+# ---------------------------------------------------------------------------
+sub open_ro_file($) {
+   my ($file) = @_;
+
+   # Newer versions of Perl already do this, but just to be safe...
+   if ( $file eq '-' ) {
+      return \*STDIN;
+   }
+
+   if ( $file =~ m/.gz$/ ) {
+      open(INPUT, "gzip -dcf $file |") or die("$E: Cannot open file $file: $!\n");
+   } else {
+      open(INPUT, "<", $file) or die("$E: cannot open file $file: $!\n");
+   }
+
+   return \*INPUT;
+}
+
+# ---------------------------------------------------------------------------
+# close an open file handle
+# ---------------------------------------------------------------------------
+sub close_file($) {
+   my ($fh) = @_;
+
+   if ( $fh == \*STDIN || $fh == \*STDOUT ) {
+      return;
+   }
+   close($fh) or die("$E: cannot close input file: $!\n");
+}
 
 
 
@@ -103,7 +168,7 @@ sub get_datetime_str() {
    # since I roll-my-own, I had better validate
    my $str = "${year}${mon}${mday}_${hour}${min}${sec}";
    if ( length($str) != 15 ) {
-      die("ERROR: problem in ARC::Common::get_datetime_str()\n");
+      die("$E: problem in ARC::Common::get_datetime_str()\n");
    }
 
    return $str;
