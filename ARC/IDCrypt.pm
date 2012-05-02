@@ -14,7 +14,7 @@ require Exporter;
 our $VERSION = '0.01';
 our @ISA = qw(Exporter);
 our @EXPORT = qw(encrypt decrypt);
-our @EXPORT_OK = qw(OTP encrypt32 encrypt32);
+our @EXPORT_OK = qw(OTP encrypt32 encrypt32 dec2bin32 bin2dec32);
 
 use strict;
 use warnings;
@@ -34,8 +34,8 @@ our $debug = 0;     # See note in say() about this!
 our $E = 'ERROR';
 
 # TIM GLOBALS
-use constant OFFSET     => 1410000000;
-use constant MININT     => 0;
+#use constant OFFSET     => 1410000000;
+use constant OFFSET     => 1000000000;
 use constant MAXINT     => 8589934591 + OFFSET;
 my $bits = 33;
 
@@ -46,14 +46,14 @@ my $bits = 33;
 sub encrypt($$) {
    my ($ID, $PW) = @_;
 
-   if ( $ID > MAXINT || $ID < MININT ) {
-      die("$E: id ($ID) is outside of allowable range MININT - MAXINT\n");
+   if ( $ID > MAXINT || $ID < OFFSET ) {
+      die("$E: id ($ID) is outside of allowable range " . OFFSET . " - " . MAXINT . "\n");
    }
 
    # convert to bit strings
    # trim off the leading 0b added by as_bin()
    # pre-pend leading zeros to make a fixed length string, $bits long
-   #print "bits:" . 1x$bits . "\n";
+   #print "bits:" . 1x$bits . "\n";   # reference line
    #my $id = sprintf("%0${bits}s", substr(Math::BigInt->new($ID - OFFSET)->as_bin(), 2));
    my $id = Math::BigInt->new($ID) - OFFSET;
    $id = sprintf("%0${bits}s", substr($id->as_bin(), 2));
@@ -78,8 +78,8 @@ sub encrypt($$) {
 sub decrypt($$) {
    my ($ID, $PW) = @_;
 
-   if ( $ID > MAXINT || $ID < MININT ) {
-      die("$E: id ($ID) is outside of allowable range MININT - MAXINT\n");
+   if ( $ID > MAXINT || $ID < OFFSET ) {
+      die("$E: id ($ID) is outside of allowable range OFFSET - MAXINT\n");
    }
 
    #my $id = sprintf("%0${bits}s", substr(Math::BigInt->new($ID)->as_bin(), 2));
@@ -109,8 +109,8 @@ sub decrypt($$) {
 sub encrypt32($$) {
    my ($id, $pw) = @_;
 
-   if ( $id > MAXINT || $id < MININT ) {
-      die("$E: id ($id) is outside of allowable range MININT - MAXINT\n");
+   if ( $id > MAXINT || $id < OFFSET ) {
+      die("$E: id ($id) is outside of allowable range OFFSET - MAXINT\n");
    }
 
    $id = scalar reverse sprintf("%032b", $id);
@@ -130,8 +130,8 @@ sub encrypt32($$) {
 sub decrypt32($$) {
    my ($id, $pw) = @_;
 
-   if ( $id > MAXINT || $id < MININT ) {
-      die("$E: id ($id) is outside of allowable range MININT - MAXINT\n");
+   if ( $id > MAXINT || $id < OFFSET ) {
+      die("$E: id ($id) is outside of allowable range OFFSET - MAXINT\n");
    }
 
    $id = sprintf("%032b", $id);
@@ -178,6 +178,7 @@ sub bin2dec32($) {
 
 
 ## inspired by: http://www.perlmonks.org/?node_id=163123
+## returns 64-bit wide bitstrings
 #use Bit::Vector;
 #sub dec2bin($) {
 #   my $vec = Bit::Vector->new_Dec(64, shift);
