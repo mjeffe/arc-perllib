@@ -12,11 +12,13 @@ require Exporter;
 
 # export functions and variables
 our @ISA = qw(Exporter);
-our @EXPORT = qw(say dbg zpad get_datetime_str rr lotto open_ro_file close_file system_call get_record);
+our @EXPORT = qw(say dbg zpad get_datetime_str rr lotto open_ro_file close_file system_call get_record list_minus list_union list_uniq list_intersect);
 #our @EXPORT_OK = qw();
 
 use strict;
 use warnings;
+use POSIX qw(SIGINT);
+
 
 # prototypes
 sub dbg($$;$);
@@ -29,6 +31,11 @@ sub open_ro_file($);
 sub close_file($);
 sub system_call($$);
 sub get_record($);
+sub list_minus($$);
+sub list_union($$);
+sub list_uniq($);
+sub list_intersect($$);
+
 
 # can (and should) be set by any 'use'er of this module
 our $verbose = 0;     # See note in say() about this!
@@ -49,15 +56,39 @@ sub get_record($) {
 
 
 # ---------------------------------------------------------------------------
-#  Run system command
 # ---------------------------------------------------------------------------
 sub system_call($$) {
    my ($cmd, $app) = @_;
 
-   dbg(3, "CMD: $cmd\n");
-   my $rc = system($cmd);
-   if ( ($rc >>= 8) != 0 ) {
-      die("$E: $app failed with return code $?: $!\n");
+   # simplistic approach
+   #print "CMD: $cmd\n" if ( $opts{verbose} > 0 );
+   #my $rc = system($cmd);
+   #if ( ($rc >>= 8) != 0 ) {
+   #   die("$E: $app failed with return code $?: $!\n");
+   #}
+
+
+   # more robust approach
+   my $rc = system("$cmd");
+
+   # did system call fail because Ctrl-C killed it?
+   if ( ($rc & 127) == SIGINT ) {
+      print STDERR "\nCtrl-C trapped!\n";
+      die("\n");
+      #SIGINT_handler();
+   }
+   # could not execute?
+   elsif ( $rc == -1 ) {
+      print STDERR scalar localtime, ": ERROR - failed to execute '$app': $!\n";
+      die("\n");
+      #bailout();
+   }
+   # step itself failed?
+   elsif ($rc) {
+      my $ret = $rc >> 8;
+      print STDERR scalar localtime, ": ERROR - '$app' failed with return code $ret\n";
+      die("\n");
+      #bailout();
    }
 }
 
@@ -182,6 +213,64 @@ sub rr($$) {
    my ($min, $max) = @_;
    return int(rand($max)) + $min;
 }
+
+# -----------------------------------------------------------------------------
+# Returns array composed of all elements in A that are not in B
+# Note: elements are normalized to lower case for comparrison!
+# -----------------------------------------------------------------------------
+sub list_minus($$) {
+  my ($listref_a, $listref_b) = @_;
+  my @list;
+  my %hash;
+
+  map { $hash{lc($_)} = ''; } @$listref_b;
+  return grep { ! exists $hash{lc($_)} } @$listref_a;
+}
+
+# -----------------------------------------------------------------------------
+# Returns an array composed of all unique elements in A and B
+# Note: elements are normalized to lower case for comparrison!
+# -----------------------------------------------------------------------------
+sub list_union($$) {
+  my ($listref_a, $listref_b) = @_;
+  my @full_list = (@$listref_a, @$listref_b);
+  my %uniq_hash;
+
+  foreach my $f (@full_list) {
+    if ( ! exists $uniq_hash{lc($f)} ) {
+      $uniq_hash{lc($f)} = '';
+    } 
+  }
+  
+  return (keys %uniq_hash);
+}
+
+
+# -----------------------------------------------------------------------------
+# Returns an array composed of all unique elements in A
+# Note: elements are normalized to lower case for comparrison!
+# -----------------------------------------------------------------------------
+sub list_uniq($) {
+  my ($listref_a) = @_;
+  my @dummy = ();
+  
+  return list_union($listref_a, \@dummy);
+}
+
+
+# -----------------------------------------------------------------------------
+# Returns list composed of all elements in both A and B
+# Note: elements are normalized to lower case for comparrison!
+# -----------------------------------------------------------------------------
+sub list_intersect($$) {
+  my ($listref_a, $listref_b) = @_;
+  my @list;
+  my %hash;
+
+  map { $hash{lc($_)} = ''; } @$listref_b;
+  return grep { exists $hash{lc($_)} } @$listref_a;
+}
+
 
 # ------------------------------------------------------------------------
 # predict lottery winner
