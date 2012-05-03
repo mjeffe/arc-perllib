@@ -67,8 +67,10 @@ sub system_call($$) {
    #   die("$E: $app failed with return code $?: $!\n");
    #}
 
+   # presumably, a more robust approach
 
-   # more robust approach
+   # NOTE! return code of pipelines will not be properly detected!
+
    my $rc = system("$cmd");
 
    # did system call fail because Ctrl-C killed it?
@@ -220,7 +222,6 @@ sub rr($$) {
 # -----------------------------------------------------------------------------
 sub list_minus($$) {
   my ($listref_a, $listref_b) = @_;
-  my @list;
   my %hash;
 
   map { $hash{lc($_)} = ''; } @$listref_b;
@@ -264,7 +265,6 @@ sub list_uniq($) {
 # -----------------------------------------------------------------------------
 sub list_intersect($$) {
   my ($listref_a, $listref_b) = @_;
-  my @list;
   my %hash;
 
   map { $hash{lc($_)} = ''; } @$listref_b;
