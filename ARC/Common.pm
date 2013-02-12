@@ -12,7 +12,7 @@ require Exporter;
 
 # export functions and variables
 our @ISA = qw(Exporter);
-our @EXPORT = qw(say dbg zpad get_datetime_str rr lotto open_ro_file close_file system_call get_record list_minus list_union list_uniq list_intersect);
+our @EXPORT = qw(say dbg esay edbg zpad get_datetime_str rr lotto open_ro_file close_file system_call get_record list_minus list_union list_uniq list_intersect);
 #our @EXPORT_OK = qw();
 
 use strict;
@@ -23,6 +23,8 @@ use POSIX qw(SIGINT);
 # prototypes
 sub dbg($$;$);
 sub say($$;$);
+sub edbg($$;$);
+sub esay($$;$);
 sub zpad($$;$);
 sub rr($$);
 sub get_datetim_str();
@@ -130,7 +132,6 @@ sub close_file($) {
 }
 
 
-
 # ---------------------------------------------------------------------------
 # standardize debug messages.
 # see say()
@@ -159,6 +160,30 @@ sub say($$;$) {
 
    if ( $lvl <= $verbose ) {
       print STDOUT " " x $indent . "$msg";
+   }
+}
+
+# ---------------------------------------------------------------------------
+# STDERR version of dbg
+# ---------------------------------------------------------------------------
+sub edbg($$;$) {
+   my $lvl = shift;
+   my $msg = shift;
+   my $indent = shift || 0;
+
+   esay($lvl, (scalar localtime) . ": " . " " x $indent . "$msg", 0);
+}
+
+# ---------------------------------------------------------------------------
+# STDERR version of say
+# ---------------------------------------------------------------------------
+sub esay($$;$) {
+   my $lvl = shift;
+   my $msg = shift;
+   my $indent = shift || 0;
+
+   if ( $lvl <= $verbose ) {
+      print STDERR " " x $indent . "$msg";
    }
 }
 
