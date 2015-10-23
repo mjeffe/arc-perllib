@@ -62,36 +62,26 @@ sub init_tokenizer(%) {
 
 # ---------------------------------------------------------------------------
 # tokenzie every string in the array ref
+#
+# OJO: For efficiency we may want to pick a random map_id once in init and use
+# the same key for the entire invokation? Would not be as random, but...
 # ---------------------------------------------------------------------------
 sub tokenize_strings($) {
    my ($arrayref) = @_;
 
-   # 1) create RMC tokens of each individual string
-
-   # pick a random map table key to use for all strings in this batch
-   # OJO: NOT very efficient to be called per row... need to optimize
+   # pick a random map key to use for all strings in this batch
    my @keys = keys $opts{rmc_map};
    my $map_id = $keys[int(rand(scalar @keys))];
 
-   my @arr = map {
-      my $f = tok_encrypt_rmc($_, $map_id); # generate RMC token
-      #$f = tok_encrypt_xo($f);   # generate XO token
-      $f; 
-   } @$arrayref;
-   if ( $opts{'output-rmc'} ) { return @arr; }
+   # generate aric tokens (currently using RMC)
+   my @arr = map { tok_encrypt_rmc($_, $map_id); } @$arrayref;
+   if ( $opts{'output-aric'} ) { return @arr; }
 
-   # 2) concatenate all RMC tokens
-   my $rmc = join($opts{keys}{rmc_token_delimiter}, @arr);
+   # concatenate all aric tokens
+   my $aric = join($opts{keys}{rmc_token_delimiter}, @arr);
 
-   # encrypt entire RMC token string to create XO token
-   my @xo = map {
-      tok_encrypt_xo($_); # generate XO token
-#      my $f = tok_encrypt_xo($_); # generate XO token
-
-      # concatenate map_id as an xo token header
-      #$map_id . $opts{keys}{rmc_delimiter} . $f; 
-#      $f;
-   } ($rmc);
+   # aric will now put on the XO armor
+   my @xo = map { tok_encrypt_xo($_); } ($aric);
 
    return @xo;
 }
@@ -102,18 +92,14 @@ sub tokenize_strings($) {
 sub detokenize_strings($) {
    my ($arrayref) = @_;
 
-   # decrypt entire XO token
-   my @arr = map {
-      my $f = tok_decrypt_xo($_); # level 2
-      #$f = tok_decrypt_rmc($f);   # level 1
-      $f; 
-   } @$arrayref;
+   # aric will now take off the XO armor
+   my @arr = map { tok_decrypt_xo($_); } @$arrayref;
 
-   # 2) parse out RMC tokens
-   my @rmc = split(quotemeta($opts{keys}{rmc_token_delimiter}), $arr[0]);
+   # parse out the aric tokens
+   my @aric = split(quotemeta($opts{keys}{rmc_token_delimiter}), $arr[0]);
 
-   # decrypt RMC tokens
-   my @plaintext = map { tok_decrypt_rmc($_); } @rmc;
+   # decrypt aric tokens back to plaintext
+   my @plaintext = map { tok_decrypt_rmc($_); } @aric;
 
    return @plaintext;
 }
@@ -154,7 +140,7 @@ sub tok_decrypt_rmc($) {
    # pull header from token and parse out it's two values
    my ($hdr, $tok) = split(quotemeta($opts{keys}{rmc_delimiter}), $token);
    my $map_version = hex(substr($hdr,0,2));  # first two bytes, in hex
-   my $map_id = substr($hdr,2); # map key
+   my $map_id      = substr($hdr,2); # map key
 
    if ( $map_version != $opts{keys}{rmc_version} ) {
       die("$E: Unable to decrypt token: rmc_version missmatch.\n"
