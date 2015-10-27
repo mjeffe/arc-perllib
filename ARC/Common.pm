@@ -12,13 +12,15 @@ require Exporter;
 
 # export functions and variables
 our @ISA = qw(Exporter);
-our @EXPORT = qw(say dbg esay edbg zpad get_datetime_str rr lotto open_ro_file close_file system_call get_record list_minus list_union list_uniq list_intersect);
+our @EXPORT = qw(say dbg esay edbg zpad get_datetime_str rr lotto open_ro_file close_file system_call get_record list_minus list_union list_uniq list_intersect prompt);
 # $E is a little too generic, make it exportable on demand only
 our @EXPORT_OK = qw($E);
 
 use strict;
 use warnings;
 use POSIX qw(SIGINT);
+use Term::ReadKey;     # for messing with ReadMode in password prompting
+
 
 
 # prototypes
@@ -38,6 +40,7 @@ sub list_minus($$);
 sub list_union($$);
 sub list_uniq($);
 sub list_intersect($$);
+sub prompt($;$);
 
 
 # can (and should) be set by any 'use'er of this module
@@ -312,6 +315,23 @@ sub lotto() {
    print "and the Mega Ball is ";
    print rr(1,55) . "\n";
    exit 0;
+}
+
+# ------------------------------------------------------------------------
+# prompt user for input
+# optionally, mask users input (such as for password entry)
+# ------------------------------------------------------------------------
+sub prompt($;$) {
+   my $msg = $_[0];
+   my $hide_input = $_[1] || 0;
+
+   print $msg . ": ";
+   ReadMode('noecho') if ($hide_input);  # turn off echo to terminal
+   my $ans = (<>);
+   chomp($ans);
+   ReadMode(0) if ($hide_input);         # back to normal
+   print "\n" if ($hide_input);
+   return $ans;
 }
 
 
