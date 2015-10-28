@@ -13,7 +13,7 @@ require Exporter;
 # export functions and variables
 our @ISA = qw(Exporter);
 # export functions
-our @EXPORT = qw(parse_key_file);
+our @EXPORT = qw(parse_key_file encrypt_key_file);
 #our @EXPORT_OK = qw();
 
 use strict;
@@ -49,52 +49,38 @@ my %opts = ();
 # Get config information from the provided key file
 #
 # The key file contains configuration options that are security sensitive, such
-# as encryption keys, rmc map table, etc. This file is itself encrypted and the
+# as encryption keys, salt, etc. This file is itself encrypted and the
 # user running this program will be prompted for the password to decrypt it
 #
-# The key file structure consists of key = value pairs as well as sections of
-# data delimited by special [] tags. Blank lines and comment lines begging with
-# a '#' character are allowed. For example:
+# The key file structure a plain old key=value config file.  Each line in the
+# file can be one of:
+#  1) blank line - nothing but whitespace
+#  2) a comment line - any line where the first not whitespace character is #
+#  3) a line with key = value, where:
+#        - a key is a contiguous string of non-whitespace characters
+#        - all white space before the key, and surrounding the = is ignored.
+#        - all white space following the first non-whitespace character after the = is preserved. 
 #
-#    # eXecution Owner encryption algorithm and password
-#    xo_cipher_algo = Rijndael
-#    xo_cipher_key  = My secret password
-#    #xo_cipher_salt = Use this to keep encrypted values consistent, however reduces security of tokens
+#        For example:
 #
-#    # Data Owner encryption algorithm and password (password is likely blank as we don't know it)
-#    do_cipher_algo = Rijndael
-#    do_cipher_key  = 
+#           # this comment line is valid
+#           my_key         =  some string of characters
+#      
+#           my_key2   = someother string   # this comment is not valid
+#           my_key3=foo
+#      
+#           # the following line will be silently ignored (white space in the key)
+#           bad key = something
 #
-#    # character used to delimit the RMC header from the RMC value.
-#    # MUST NOT be one of the characters in the rmc map id 0 row
-#    rmc_delimiter = :
-#    rmc_version = 1
-#    [rmc_map_begin]
-#    0|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|0|1|2|3|4|5|6|7|8|9
-#    1|PN|T1|CV|7C|DG|MT|U4|BI|6Y|SE|BQ|8Q|G6|BW|OO|7D|YG|AG|Y2|0W|MF|UU|OU|1U|Q3|MX|8I|EO|T4|20|DY|LW|G2|XZ|P4|2I
-#    2|5|J|F|A|C|4|L|B|R|S|0|9|3|2|Z|O|I|V|8|Y|Q|7|U|N|M|W|6|H|T|D|P|K|1|X|G|E
-#    ...
-#    [rmc_map_end]
+#     Would parse as: 
+#     
+#     $VAR1 = {
+#               'my_key' => 'some string of characters',
+#               'my_key2' => 'someother string   # this comment is not valid',
+#               'my_key3' => 'foo',
+#             };
 #
-# RMC Map Table structure:
-#    An RMC map table defines a series of mappings between ASCII characters in
-#    the first (reference) row and a series of random strings of varying
-#    lengths in the subsequent rows. It should have the following structure:
 #
-#     * All rows are a series of pipe (|) delimited strings of lenght >= 1
-#     * The first column of every table should have the map type ID. This is a
-#       sequence number starting with 0.  
-#     * The first row of every table should be the reference row, consisting of
-#       the map type ID = 0, followed by all ASCII characters you want mapped
-#       by the RMC cipher. Any character not listed in this reference row will
-#       not be mapped, but left as-is.
-#     * Each subsequent row in the table should have a column to match one in
-#       the reference row, which contains a string. Each string in the row
-#       should have the same length, and be unique within that row. Each row
-#       can have a different string length.
-#     * NOTE it is possible to only have row 0 in the table. This is
-#       essentially a NO-MAP table. That is A = A, B = B, etc. Useful for
-#       debugging and testing.
 # ---------------------------------------------------------------------------
 sub parse_key_file($) {
    my ($keyfile) = @_;
@@ -126,15 +112,11 @@ sub parse_key_file($) {
    if ( (scalar @missing_keys) > 0 ) {
       die("$E: key file is missing required keys: " . join(', ', @missing_keys) . "\n");
    }
-   # generate a 16 byte Initialization Vector from "salt"
-   $keys{'iv'} = substr(Digest::MD5::md5_hex($keys{xo_cipher_salt}), 0, 16);
-   #print "IV: " . $keys{iv} . "\n";
 
    dbg(3, "KEYS:\n" . Dumper(\%keys));
    dbg(3, "\n\n");
    dbg(3, "RMC MAP:\n" . Dumper(\%rmc_map));
 
-   #$opts{'keys'} = \%keys;
    return \%keys;
 }
 
@@ -182,6 +164,8 @@ sub encrypt_key_file($) {
    # since we are probably called with output redirection: 
    #     piist --encrypt-key-file --key-file my.keys > my.keys.pgp
    # we can't prompt for password on stdout. Use zenity instead
+   # TODO: should check if we can use zenity, else
+   #    die("$E: unable to run graphical password prompt, run 'gpg -c key_file.txt > key_file.txt.gpg' instead");
    #my $pw = passphrase_cb();
    #my $pw = passphrase_cb();
    my $pw = `zenity --entry --hide-text --text="Passphrase for key file"`;
