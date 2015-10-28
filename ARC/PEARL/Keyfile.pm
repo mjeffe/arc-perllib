@@ -20,9 +20,9 @@ use strict;
 use warnings;
 use Crypt::OpenPGP;
 use Term::ReadKey;   # for messing with ReadMode in password prompting
+use Data::Dumper;
 use ARC::Common;
 use ARC::Common qw($E);
-use Data::Dumper;
 
 # prototypes
 sub parse_key_file($);
