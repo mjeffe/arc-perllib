@@ -14,7 +14,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 our @EXPORT = qw(say dbg esay edbg zpad get_datetime_str rr lotto open_ro_file close_file system_call get_record list_minus list_union list_uniq list_intersect prompt);
 # $E is a little too generic, make it exportable on demand only
-our @EXPORT_OK = qw($E);
+our @EXPORT_OK = qw($E $W);
 
 use strict;
 use warnings;
@@ -46,6 +46,7 @@ sub prompt($;$);
 # can (and should) be set by any 'use'er of this module
 our $verbose = 0;     # See note in say() about this!
 our $E = 'ERROR';
+our $W = 'WARNING';
 
 
 # ---------------------------------------------------------------------------
