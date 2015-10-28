@@ -25,7 +25,7 @@ use Crypt::CBC;
 use List::Util 'shuffle';
 use Data::Dumper;
 use ARC::Common;
-use ARC::Common qw($E);
+use ARC::Common qw($E $W);
 
 # prototypes
 sub add_noise($);
@@ -87,6 +87,9 @@ sub init_tokenizer(%) {
    # override defaults with input parms
    %opts = (%defaults, %$href);
    %{$opts{keys}} = (%{$defaults{keys}}, %{$href->{keys}});
+   # generate a 16 byte Initialization Vector from "salt"
+   $opts{'keys'}{'iv'} = substr(Digest::MD5::md5_hex($opts{keys}{xo_cipher_salt}), 0, 16)
+      unless( $opts{'keys'}{'iv'} );
    #print "ARC::Tokenizer init opts:\n" . Dumper(\%opts) . "\n";
 
    # check for required options
@@ -96,9 +99,6 @@ sub init_tokenizer(%) {
       unless( defined($opts{keys}{xo_cipher_key}) );
    die("$E: xo_cipher_salt is not defined in the key file!\n")
       unless( defined($opts{keys}{xo_cipher_salt}) );
-
-   # generate a 16 byte Initialization Vector from "salt"
-   #$opts{'keys'}{'iv'} = substr(Digest::MD5::md5_hex($opts{keys}{xo_cipher_salt}), 0, 16);
 
    # each version of rmc has different options. Set those here
    if ( $opts{keys}{aric_version} == 3 ) {
