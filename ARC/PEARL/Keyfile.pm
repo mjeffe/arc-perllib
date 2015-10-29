@@ -102,16 +102,8 @@ sub parse_key_file($) {
       }
    }
 
-   # check for required keys
-   my @required_keys = qw(
-         aric_version rmc_salt
-         xo_cipher_algo xo_cipher_key xo_cipher_salt
-         do_cipher_algo
-      );
-   my @missing_keys = list_minus(\@required_keys, [keys %keys]);
-   if ( (scalar @missing_keys) > 0 ) {
-      die("$E: key file is missing required keys: " . join(', ', @missing_keys) . "\n");
-   }
+   # Do not check for required keys here, rather let each module that uses the
+   # keyfile check for their own required parameters
 
    dbg(3, "KEYS:\n" . Dumper(\%keys));
    dbg(3, "\n\n");
