@@ -157,10 +157,10 @@ sub tokenize_strings($$) {
 
    # generate the DO token
    if ( $opts{'seperate-do'} ) {
-      return ($xo, tok_encrypt_do(join($opts{delimiter}, $strs_ref)));
+      return ($xo, tok_encrypt_do(join($opts{delimiter}, @$strs_ref)));
    }
 
-   return ($xo . $opts{'xo-do-delimiter'} . tok_encrypt_do(join($opts{delimiter}, $strs_ref)));
+   return ($xo . $opts{'xo-do-delimiter'} . tok_encrypt_do(join($opts{delimiter}, @$strs_ref)));
 }
 
 # ---------------------------------------------------------------------------
