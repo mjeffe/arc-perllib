@@ -68,18 +68,17 @@ sub init_tokenizer(%) {
       'seperate-do'     => 0,
       'xo-do-delimiter' => 'h',
       'keys' => {
-         'ptk_version'              => undef,
-         'aric_version'             => undef,
-         'aric_token_delimiter'     => '|',
-         'aric_header_delimiter'    => ':',
-         'rmc_salt'                 => undef,
-         'rmc_input_domain'         => undef,
-         'rmc_max_char_map_length'  => 4,
+         'xo_version'               => undef,
          'xo_cipher_alog'           => 'Rijndael',
          'xo_cipher_key'            => undef,
          'xo_cipher_salt'           => undef,
          'do_cipher_alog'           => 'Rijndael',
          'do_cipher_key'            => undef,
+         'aric_token_delimiter'     => '|',
+         'aric_header_delimiter'    => ':',
+         'rmc_salt'                 => undef,
+         'rmc_input_domain'         => undef,
+         'rmc_max_char_map_length'  => 4,
          'iv'                       => undef,
       },
    );
@@ -90,24 +89,27 @@ sub init_tokenizer(%) {
    # generate a 16 byte Initialization Vector from "salt"
    $opts{'keys'}{'iv'} = substr(Digest::MD5::md5_hex($opts{keys}{xo_cipher_salt}), 0, 16)
       unless( $opts{'keys'}{'iv'} );
-   #print "ARC::Tokenizer init opts:\n" . Dumper(\%opts) . "\n";
 
-   # check for required options
-   die("$E: aric_version is not defined in the key file!\n")
-      unless( defined($opts{keys}{aric_version}) );
-   die("$E: xo_cipher_key is not defined in the key file!\n")
-      unless( defined($opts{keys}{xo_cipher_key}) );
-   die("$E: xo_cipher_salt is not defined in the key file!\n")
-      unless( defined($opts{keys}{xo_cipher_salt}) );
+   # check for required keys
+   my @required_keys = qw(
+         xo_version xo_cipher_algo xo_cipher_key xo_cipher_salt
+         do_cipher_algo
+         aric_cipher
+      );
+   my @missing_keys = list_minus(\@required_keys, [keys $opts{keys}]);
+   if ( (scalar @missing_keys) > 0 ) {
+      die("$E: key file is missing required keys: " . join(', ', @missing_keys) . "\n");
+   }
 
-   # each version of rmc has different options. Set those here
-   if ( $opts{keys}{aric_version} == 3 ) {
+   # each token version has different options. Set those here
+   if ( $opts{keys}{xo_version} == 1 ) {
+      die("$E: key file aric_cipher is wrong for this token version!\n") if ( lc($opts{keys}{aric_cipher}) ne 'rmc' );
       die("$E: rmc_salt is not defined in the key file!\n") if ( ! defined($opts{keys}{rmc_salt}) );
       $opts{keys}{aric_header_delimiter} = ':';
       $opts{keys}{aric_token_delimiter} = '|';
    }
    else {
-      die("$E: unknown aric_version\n");
+      die("$E: unknown xo_version\n");
    }
 
    # build the in-memory rmc maps
@@ -117,6 +119,21 @@ sub init_tokenizer(%) {
    # This could also be done in tokenize_strings() for greater randomness
    my @keys = keys %rmc_map;
    $map_id = $keys[int(rand(scalar @keys))];
+
+   # pregenerate the token header
+   #
+   # token header format = VVS*D
+   # where:
+   #   VV   = arci version number in hex
+   #   S*   = variable length string, map table key (substr of DO password hash)
+   #   D    = token header delimiter
+   # 
+   # NOTE: what follows aric version in the header, should be version dependent. For
+   #   now this is unimplemented.
+   #
+   $opts{keys}{xo_header} = sprintf("%02X", $opts{keys}{xo_version}) . $map_id . $opts{keys}{aric_header_delimiter};
+
+   #print "ARC::Tokenizer init opts:\n" . Dumper(\%opts) . "\n";
 }
 
 
@@ -142,20 +159,10 @@ sub tokenize_strings($$) {
    # concatenate all aric tokens
    my $aric = join($opts{keys}{aric_token_delimiter}, @arr);
 
-   # aric will now put on the XO armor
-   #
-   # token header format = VVS*:
-   # where:
-   #   VV   = arci version number in hex
-   #   S*   = variable length string, map table key (substr of DO password hash)
-   # 
-   # NOTE: what follows aric version in the header, should be version dependent. For
-   #   now this is unimplemented.
-   #
-   my $xo = sprintf("%02X", $opts{keys}{aric_version}) . $map_id . $opts{keys}{aric_header_delimiter} 
-         . tok_encrypt_xo($aric);
+   # aric will now put on the XO armor (see init_tokenizer() for info on xo_header)
+   my $xo = $opts{keys}{xo_header} . tok_encrypt_xo($aric);
 
-   # generate the DO token
+   # generate the DO token and return
    if ( $opts{'seperate-do'} ) {
       return ($xo, tok_encrypt_do(join($opts{delimiter}, @$strs_ref)));
    }
@@ -177,10 +184,10 @@ sub detokenize_strings($) {
    my $map_version = hex(substr($hdr,0,2));  # first two bytes, in hex
    my $map_id      = substr($hdr,2); # map key
 
-   if ( $map_version != $opts{keys}{aric_version} ) {
-      die("$E: Unable to decrypt token: aric_version missmatch.\n"
-         ."    key file aric_version = " . $opts{keys}{aric_version} 
-         . ", token aric_version = $map_version\n");
+   if ( $map_version != $opts{keys}{xo_version} ) {
+      die("$E: Unable to decrypt token: xo_version missmatch.\n"
+         ."    key file xo_version = " . $opts{keys}{xo_version} 
+         . ", token xo_version = $map_version\n");
    }
 
    # seperate xo and do tokens
@@ -241,10 +248,10 @@ sub tok_decrypt_rmc($) {
    my $map_version = hex(substr($hdr,0,2));  # first two bytes, in hex
    my $map_id      = substr($hdr,2); # map key
 
-   if ( $map_version != $opts{keys}{aric_version} ) {
-      die("$E: Unable to decrypt token: aric_version missmatch.\n"
-         ."    key file aric_version = " . $opts{keys}{aric_version} 
-         . ", token aric_version = $map_version\n");
+   if ( $map_version != $opts{keys}{xo_version} ) {
+      die("$E: Unable to decrypt token: xo_version missmatch.\n"
+         ."    key file xo_version = " . $opts{keys}{xo_version} 
+         . ", token xo_version = $map_version\n");
    }
 
    # length of rmc map id is the length strings it maps to or from
