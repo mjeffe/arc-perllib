@@ -17,10 +17,11 @@ our @EXPORT = qw(init_standardizer standardize_pii standardize_name standardize_
 
 use strict;
 use warnings;
-use Time::Piece;     # for dob reformatting
+#use Time::Piece;     # core module, but will not parse dates outside epoch range (1902 - 2038 ish)
+use POSIX::strptime; # non-core module. bummer...
 use Data::Dumper;
 use ARC::Common;
-use ARC::Common qw($E);
+use ARC::Common qw($E $W);
 
 # prototypes
 # exportable
@@ -130,11 +131,28 @@ sub standardize_ssn($) {
 sub standardize_dobymd($) {
    my ($s) = @_;
 
+   return $s if ( $s eq '' );
    return $s if ( $opts{'dob-format'} eq "%Y%m%d" );
-   my $dt = Time::Piece->strptime($s, $opts{'dob-format'});
 
-   #return $dt->strftime("%Y%m%d");
-   return $dt->ymd('');
+   # can only handle dates within the valid epoch range (1902 - 2038 ish)
+   #my $dt = eval { return Time::Piece->strptime($s, $opts{'dob-format'}); };
+   #if ( $@ ) {
+   #   print "$E: standardize_dobymd($s): $@";
+   #   return '';
+   #}
+   #return $dt->ymd('');
+
+   #my ($sec, $min, $hour, $mday, $mon, $year, $wday, $yday) = POSIX::strptime("string", "Format");
+   my ($sec, $min, $hour, $mday, $mon, $year, $wday, $yday) = POSIX::strptime($s, $opts{'dob-format'});
+   if ( defined($year) && defined($mon) && defined($mday) ) {
+      return sprintf("%d%02d%02d", $year+1900, $mon+1, $mday);
+      #my $d = sprintf("%d%02d%02d", $year+1900, $mon+1, $mday);
+      #print "PARSING: $s, GOT: $d\n";
+      #return $d;
+   }
+   
+   print "$W: error parsing date ($s) on record $main::recid\n";
+   return '';
 }
 
 
