@@ -12,7 +12,7 @@ require Exporter;
 
 # export functions and variables
 our @ISA = qw(Exporter);
-our @EXPORT = qw(say dbg esay edbg zpad get_datetime_str rr lotto open_ro_file close_file system_call get_record list_minus list_union list_uniq list_intersect prompt);
+our @EXPORT = qw(say dbg esay edbg zpad get_datetime_str rr lotto open_ro_file close_file system_call get_record list_minus list_union list_uniq list_intersect prompt commify);
 # $E is a little too generic, make it exportable on demand only
 our @EXPORT_OK = qw($E $W);
 
@@ -41,6 +41,7 @@ sub list_union($$);
 sub list_uniq($);
 sub list_intersect($$);
 sub prompt($;$);
+sub commify($);
 
 
 # can (and should) be set by any 'use'er of this module
@@ -326,7 +327,7 @@ sub prompt($;$) {
    my $msg = $_[0];
    my $hide_input = $_[1] || 0;
 
-   print $msg . ": ";
+   print $msg . " ";
    ReadMode('noecho') if ($hide_input);  # turn off echo to terminal
    my $ans = (<>);
    chomp($ans);
@@ -334,6 +335,16 @@ sub prompt($;$) {
    print "\n" if ($hide_input);
    return $ans;
 }
+
+# ------------------------------------------------------------------------
+# Adds commas to a number for display purposes.
+# ------------------------------------------------------------------------
+sub commify($) {
+   local $_  = shift;
+   1 while s/^([-+]?\d+)(\d{3})/$1,$2/;
+   return $_;
+}
+
 
 
 1;
