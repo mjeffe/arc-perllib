@@ -381,7 +381,7 @@ sub build_rmc_map() {
    if ( defined($opts{keys}{rmc_input_domain}) ) {
       @input_domain = split('', $opts{keys}{rmc_input_domain});
    }
-   dbg(2, "number of character in the input domain: " . scalar @input_domain . "\n", 2);
+   dbg(2, scalar @input_domain . " characters in the input domain: \n", 2);
    dbg(2, "input domain: " . join('',@input_domain) . "\n", 2);
 
    # Greg's input here! What is the minimum string length of output characters
