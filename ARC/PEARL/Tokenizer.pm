@@ -22,10 +22,9 @@ use Crypt::CBC;
 #use Digest;
 #use Digest::MD5 qw(md5_hex);
 #use Digest::SHA qw(sha512_hex);
-use List::Util 'shuffle';
+#use List::Util 'shuffle';
 use Data::Dumper;
-use ARC::Common;
-use ARC::Common qw($E $W);
+use ARC::Common qw($E $W dbg list_minus);
 
 # prototypes
 sub add_noise($);
@@ -52,6 +51,7 @@ my $map_id = '';
 my $xo_cipher;
 my $do_cipher;
 
+our $VERSION = 0.1;
 
 
 
@@ -60,8 +60,7 @@ my $do_cipher;
 # ---------------------------------------------------------------------------
 sub init_tokenizer(%) {
    my ($href) = @_;
-   #%opts = %$href;
-   #$opts{'xo-do-delimiter'} = 'h';
+   dbg(3, "Initializing Tokenizer...\n");
 
    # document the options we expect and set defaults
    my %defaults = (
@@ -158,6 +157,7 @@ sub init_tokenizer(%) {
       #-header        => 'none',
    );
 
+   dbg(4, "End Tokenizer::init_tokenizer(): OPTS:\n".Dumper(\%opts)."\n");
 }
 
 
