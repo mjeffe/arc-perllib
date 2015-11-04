@@ -11,9 +11,8 @@ require Exporter;
 
 # export functions and variables
 our @ISA = qw(Exporter);
-# export functions
-our @EXPORT = qw(init_standardizer standardize_pii standardize_name standardize_ssn standardize_dobymd);
-#our @EXPORT_OK = qw();
+our @EXPORT = qw(standardize_pii);
+our @EXPORT_OK = qw(init standardize_name standardize_ssn standardize_dobymd);
 
 use strict;
 use warnings;
@@ -24,7 +23,7 @@ use ARC::Common qw($E $W dbg);
 
 # prototypes
 # exportable
-sub init_standardizer(%);
+sub init(%);
 sub standardize_pii($);
 sub standardize_name($);
 sub standardize_ssn($);
@@ -40,7 +39,7 @@ our $VERSION = 0.1;
 
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
-sub init_standardizer(%) {
+sub init(%) {
    my ($href) = @_;
    %opts = %$href;
    dbg(3, "Standardizer init...\n");

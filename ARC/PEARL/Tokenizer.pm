@@ -12,9 +12,8 @@ require Exporter;
 
 # export functions and variables
 our @ISA = qw(Exporter);
-# export functions
-our @EXPORT = qw(init_tokenizer tokenize_strings detokenize_strings);
-our @EXPORT_OK = qw(tok_encrypt_rmc tok_decrypt_rmc tok_encrypt_xo tok_decrypt_xo tok_encrypt_do tok_decrypt_do);
+our @EXPORT = qw(tokenize_strings detokenize_strings);
+our @EXPORT_OK = qw(init tok_encrypt_rmc tok_decrypt_rmc tok_encrypt_xo tok_decrypt_xo tok_encrypt_do tok_decrypt_do);
 
 use strict;
 use warnings;
@@ -36,7 +35,7 @@ sub tok_decrypt_xo($);
 sub tok_encrypt_do($);
 sub tok_decrypt_do($);
 # exportable
-sub init_tokenizer(%);
+sub init(%);
 sub tokenize_strings($$);
 sub detokenize_strings($);
 # obsolete
@@ -58,7 +57,7 @@ our $VERSION = 0.1;
 # ---------------------------------------------------------------------------
 # Initialize the tokenizer
 # ---------------------------------------------------------------------------
-sub init_tokenizer(%) {
+sub init(%) {
    my ($href) = @_;
    dbg(3, "Initializing Tokenizer...\n");
 
@@ -87,6 +86,8 @@ sub init_tokenizer(%) {
    # override defaults with input parms
    %opts = (%defaults, %$href);
    %{$opts{keys}} = (%{$defaults{keys}}, %{$href->{keys}});
+   dbg(3, "Tokenizer opts:\n".Dumper(\%opts)."\n");
+
    # generate a 16 byte Initialization Vector from "salt"
    $opts{'keys'}{'iv'} = substr(Digest::MD5::md5_hex($opts{keys}{xo_cipher_salt}), 0, 16)
       unless( $opts{'keys'}{'iv'} );
@@ -363,11 +364,11 @@ sub build_rmc_map() {
    if ( defined($opts{keys}{rmc_input_domain}) ) {
       @input_domain = split('', $opts{keys}{rmc_input_domain});
    }
-   dbg(2, scalar @input_domain . " characters in the input domain: \n", 2);
-   dbg(2, "input domain: " . join('',@input_domain) . "\n", 2);
+   dbg(3, scalar @input_domain . " characters in the input domain:\n", 2);
+   dbg(3, "input domain:--->" . join('',@input_domain) . "<---\n", 2);
 
    # Greg's input here! What is the minimum string length of output characters
-   # we need to represent every character in the input domain.
+   # that we need to represent every character in the input domain.
    #my $min_strlen = POSIX::ceil(log(scalar(@input_domain))/log(scalar(@output_domain)));
    my $min_strlen = POSIX::ceil(log(scalar(@input_domain))/log(16));  # assume all 16 hex chars will be in map_noise
    if ( $max_strlen < $min_strlen ) {

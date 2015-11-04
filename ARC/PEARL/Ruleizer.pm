@@ -15,9 +15,8 @@ require Exporter;
 
 # export functions and variables
 our @ISA = qw(Exporter);
-# export functions
-our @EXPORT = qw(init_ruleizer add_rules);
-#our @EXPORT_OK = qw();
+our @EXPORT = qw(add_rules);
+our @EXPORT_OK = qw(init);
 
 use strict;
 use warnings;
@@ -26,7 +25,7 @@ use ARC::Common qw($E $W dbg);
 
 # prototypes
 # exportable
-sub init_ruleizer(%);
+sub init(%);
 sub add_rules($);
 
 # globals
@@ -37,7 +36,7 @@ our $VERSION = 0.1;
 
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
-sub init_ruleizer(%) {
+sub init(%) {
    my ($href) = @_;
    %opts = %$href;
    dbg(3, "Ruleizer init...\n");
