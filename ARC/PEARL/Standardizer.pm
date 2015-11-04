@@ -20,8 +20,7 @@ use warnings;
 #use Time::Piece;     # core module, but will not parse dates outside epoch range (1902 - 2038 ish)
 use POSIX::strptime; # non-core module. bummer...
 use Data::Dumper;
-use ARC::Common;
-use ARC::Common qw($E $W);
+use ARC::Common qw($E $W dbg);
 
 # prototypes
 # exportable
@@ -35,6 +34,7 @@ sub standardize_dobymd($);
 my %opts = ();
 my @invalid_ssn_patterns = ();
 
+our $VERSION = 0.1;
 
 
 
@@ -43,8 +43,8 @@ my @invalid_ssn_patterns = ();
 sub init_standardizer(%) {
    my ($href) = @_;
    %opts = %$href;
-   #print "TOK INIT:\n" . Dumper(\%opts) . "\n";
-   
+   dbg(3, "Standardizer init...\n");
+
    # ??? define the order of fields we expect to see in standardize_pii?
 
    # define invalid ssn patterns
