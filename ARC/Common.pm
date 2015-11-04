@@ -13,7 +13,7 @@ require Exporter;
 # export functions and variables
 our @ISA = qw(Exporter);
 our @EXPORT = qw(say dbg esay edbg zpad get_datetime_str rr lotto open_ro_file close_file system_call get_record list_minus list_union list_uniq list_intersect prompt commify);
-# $E is a little too generic, make it exportable on demand only
+# $E and $W are a little too generic, make exportable on demand only
 our @EXPORT_OK = qw($E $W);
 
 use strict;
@@ -48,6 +48,7 @@ sub commify($);
 our $verbose = 0;     # See note in say() about this!
 our $E = 'ERROR';
 our $W = 'WARNING';
+our $VERSION = 0.3;
 
 
 # ---------------------------------------------------------------------------
