@@ -13,7 +13,7 @@ require Exporter;
 # export functions and variables
 our @ISA = qw(Exporter);
 our @EXPORT = qw(parse_key_file encrypt_key_file);
-#our @EXPORT_OK = qw();
+#our @EXPORT_OK = qw(init);
 
 use strict;
 use warnings;
@@ -35,7 +35,7 @@ our $VERSION = 0.1;
 
 ## ---------------------------------------------------------------------------
 ## ---------------------------------------------------------------------------
-#sub init_keyfile(%) {
+#sub init(%) {
 #   my ($href) = @_;
 #   %opts = %$href;
 #   #print "TOK INIT:\n" . Dumper(\%opts) . "\n";
