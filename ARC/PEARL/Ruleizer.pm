@@ -22,8 +22,7 @@ our @EXPORT = qw(init_ruleizer add_rules);
 use strict;
 use warnings;
 use Data::Dumper;
-use ARC::Common;
-use ARC::Common qw($E);
+use ARC::Common qw($E $W dbg);
 
 # prototypes
 # exportable
@@ -33,7 +32,7 @@ sub add_rules($);
 # globals
 my %opts = ();
 
-
+our $VERSION = 0.1;
 
 
 # ---------------------------------------------------------------------------
@@ -41,7 +40,7 @@ my %opts = ();
 sub init_ruleizer(%) {
    my ($href) = @_;
    %opts = %$href;
-   #print "TOK INIT:\n" . Dumper(\%opts) . "\n";
+   dbg(3, "Ruleizer init...\n");
 }
 
 
