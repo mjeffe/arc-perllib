@@ -12,27 +12,24 @@ require Exporter;
 
 # export functions and variables
 our @ISA = qw(Exporter);
-# export functions
 our @EXPORT = qw(parse_key_file encrypt_key_file);
 #our @EXPORT_OK = qw();
 
 use strict;
 use warnings;
 use Crypt::OpenPGP;
-use Term::ReadKey;   # for messing with ReadMode in password prompting
 use Data::Dumper;
-use ARC::Common;
-use ARC::Common qw($E);
+use ARC::Common qw($E $W dbg prompt);
 
 # prototypes
-sub parse_key_file($);
+sub parse_key_file($;$);
+sub decrypt_key_file($;$);
 sub encrypt_key_file($);
-sub decrypt_key_file($);
-sub pgp_passphrase_cb();
 
 # globals
-my %opts = ();
+#my %opts = ();
 
+our $VERSION = 0.1;
 
 
 
@@ -82,15 +79,13 @@ my %opts = ();
 #
 #
 # ---------------------------------------------------------------------------
-sub parse_key_file($) {
-   my ($keyfile) = @_;
+sub parse_key_file($;$) {
+   my ($keyfile, $passphrase) = @_;
+   dbg(3, "parsing key file $keyfile...\n");
 
    # set up parameters I will need when parsing key file
    my %keys = ();
-   my $rmc_section = 0;
-   my @rmc_map_ref_row = ();
-   my %rmc_map = ();
-   my $kf = decrypt_key_file($keyfile);
+   my $kf = decrypt_key_file($keyfile, $passphrase);
    my @kf = split("\n", $kf);
    foreach my $line (@kf) {
       next if $line =~ m/^\s*#/;   # ignore any comment lines
@@ -105,10 +100,7 @@ sub parse_key_file($) {
    # Do not check for required keys here, rather let each module that uses the
    # keyfile check for their own required parameters
 
-   dbg(3, "KEYS:\n" . Dumper(\%keys));
-   dbg(3, "\n\n");
-   dbg(3, "RMC MAP:\n" . Dumper(\%rmc_map));
-
+   dbg(3, "Keyfile keys:\n" . Dumper(\%keys));
    return \%keys;
 }
 
@@ -119,15 +111,23 @@ sub parse_key_file($) {
 # NOTE:
 # key file should be encrypted with GPG or PGP using symetric-key CAST5 cipher
 # ---------------------------------------------------------------------------
-sub decrypt_key_file($) {
-   my ($filename) = @_;
+sub decrypt_key_file($;$) {
+   my ($keyfile, $passphrase) = @_;
+
+   dbg(3, "decrypting key file $keyfile...\n");
+   my %args = (
+      #Data        => $ciphertext,
+      Filename    => $keyfile,
+   );
+   if ( $passphrase ) {
+      $args{Passphrase} = $passphrase;
+   } else {
+      #$args{PassphraseCallback}  = \&pgp_passphrase_cb;
+      $args{PassphraseCallback}  = sub { prompt("PEARL key file password:", 1); };
+   }
 
    my $pgp = Crypt::OpenPGP->new;
-   my $text = $pgp->decrypt(
-      #Data        => $ciphertext,
-      Filename    => $filename,
-      PassphraseCallback  => \&pgp_passphrase_cb,
-   );
+   my $text = $pgp->decrypt(%args);
    unless ( $text ) {
       if ( $pgp->errstr =~ /Bad checksum/ ) {
          die "Decryption failed: Bad passphrase\n";
@@ -136,7 +136,7 @@ sub decrypt_key_file($) {
       }
    }
 
-   dbg(3, "DECODED KEY FILE:\n$text");
+   dbg(4, "contents of decoded key file:\n<<<BEGIN DECODED KEY FILE>>>\n$text\n<<<END DECODED KEY FILE>>>\n");
    return $text;
 }
 
@@ -174,24 +174,6 @@ sub encrypt_key_file($) {
    die "Encryption failed: ", $pgp->errstr unless $ciphertext;
    return $ciphertext;
 }
-
-# ---------------------------------------------------------------------------
-# Callback function for Crypt::OpenPGP::decrypt which prompts user for password
-# ---------------------------------------------------------------------------
-sub pgp_passphrase_cb() {
-   if ( exists($ENV{PIIST_KEYFILE_PASSWORD}) ) {
-      return $ENV{PIIST_KEYFILE_PASSWORD};
-   }
-   print "Execution Owner Key File Passphrase: ";
-   ReadMode('noecho');  # turn off echo to terminal
-   my $pw = (<>);
-   chomp($pw);
-   ReadMode(0);         # back to normal
-   print "\n";;
-   return $pw;
-}
-
-
 
 
 1;
