@@ -49,6 +49,8 @@ my %opts = ();
 my %rmc_map = ();
 my %rmc_rmap = ();
 my $map_id = '';
+my $xo_cipher;
+my $do_cipher;
 
 
 
@@ -134,6 +136,28 @@ sub init_tokenizer(%) {
    $opts{keys}{xo_header} = sprintf("%02X", $opts{keys}{xo_version}) . $map_id . $opts{keys}{aric_header_delimiter};
 
    #print "ARC::Tokenizer init opts:\n" . Dumper(\%opts) . "\n";
+
+   # generate the XO encryption cipher object
+   $xo_cipher = Crypt::CBC->new(
+      -key           => $opts{keys}{xo_cipher_key},
+      -literal_key   => 0,  # treat -key as a passphrase, not the literal encryption key
+      -cipher        => $opts{keys}{xo_cipher_algo},
+      #-salt          => $cipher_salt,
+      #-iv            => $opts{keys}{cipher_salt},
+      -iv            => $opts{keys}{iv},
+      -header        => 'none',
+   );
+
+   $do_cipher = Crypt::CBC->new(
+      -key           => $opts{keys}{do_cipher_key},
+      -literal_key   => 0,  # treat -key as a passphrase, not the literal encryption key
+      -cipher        => $opts{keys}{do_cipher_algo},
+      #-salt          => $cipher_salt,
+      #-iv            => $opts{keys}{cipher_salt},
+      #-iv            => $opts{keys}{iv},
+      #-header        => 'none',
+   );
+
 }
 
 
@@ -271,78 +295,36 @@ sub tok_decrypt_rmc($) {
 
 # ---------------------------------------------------------------------------
 # create XO (eXecution Owner) token 
+# $_[0]     = plaintext
 # ---------------------------------------------------------------------------
 sub tok_encrypt_xo($) {
-   my ($plaintext) = @_;
-
-   my $cipher = Crypt::CBC->new(
-         -key           => $opts{keys}{xo_cipher_key},
-         -literal_key   => 0,  # treat -key as a passphrase, not the literal encryption key
-         -cipher        => $opts{keys}{xo_cipher_algo},
-         #-salt          => $cipher_salt,
-         #-iv            => $opts{keys}{cipher_salt},
-         -iv            => $opts{keys}{iv},
-         -header        => 'none',
-   );
-
-   return $cipher->encrypt_hex($plaintext);
+   return $xo_cipher->encrypt_hex($_[0]);
 }
 
 
 # ---------------------------------------------------------------------------
 # decrypt XO (eXecution Owner) token 
+# $_[0]     = ciphertext
 # ---------------------------------------------------------------------------
 sub tok_decrypt_xo($) {
-   my ($ciphertext) = @_;
-
-   my $cipher = Crypt::CBC->new(
-         -key           => $opts{keys}{xo_cipher_key},
-         -literal_key   => 0,  # treat -key as a passphrase, not the literal encryption key
-         -cipher        => $opts{keys}{xo_cipher_algo},
-         #-salt          => $cipher_salt,
-         -iv            => $opts{keys}{iv},
-         -header        => 'none',
-   );
-
-   return $cipher->decrypt_hex($ciphertext);
+   return $xo_cipher->decrypt_hex($_[0]);
 }
 
 # ---------------------------------------------------------------------------
 # create DO (Data Owner) token 
+# $_[0]     = plaintext
 # ---------------------------------------------------------------------------
 sub tok_encrypt_do($) {
-   my ($plaintext) = @_;
-
-   my $cipher = Crypt::CBC->new(
-         -key           => $opts{keys}{do_cipher_key},
-         -literal_key   => 0,  # treat -key as a passphrase, not the literal encryption key
-         -cipher        => $opts{keys}{do_cipher_algo},
-         #-salt          => $cipher_salt,
-         #-iv            => $opts{keys}{cipher_salt},
-         #-iv            => $opts{keys}{iv},
-         #-header        => 'none',
-   );
-
-   return $cipher->encrypt_hex($plaintext);
+   return $do_cipher->encrypt_hex($_[0]);
 }
 
 
 # ---------------------------------------------------------------------------
 # decrypt DO (Data Owner) token 
+# $_[0]     = ciphertext
 # ---------------------------------------------------------------------------
 sub tok_decrypt_do($) {
-   my ($ciphertext) = @_;
-
-   my $cipher = Crypt::CBC->new(
-         -key           => $opts{keys}{do_cipher_key},
-         -literal_key   => 0,  # treat -key as a passphrase, not the literal encryption key
-         -cipher        => $opts{keys}{do_cipher_algo},
-         #-salt          => $cipher_salt,
-         #-iv            => $opts{keys}{iv},
-         #-header        => 'none',
-   );
-
-   return $cipher->decrypt_hex($ciphertext);
+   return $do_cipher->decrypt_hex($_[0]);
 }
 
 
