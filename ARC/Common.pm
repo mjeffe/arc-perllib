@@ -147,7 +147,7 @@ sub dbg($$;$) {
    my $msg = shift;
    my $indent = shift || 0;
 
-   say($lvl, (scalar localtime) . ": " . " " x $indent . "$msg", 0);
+   say($lvl, (scalar localtime) . "($lvl): " . " " x $indent . "$msg", 0);
 }
 
 # ---------------------------------------------------------------------------
@@ -177,7 +177,7 @@ sub edbg($$;$) {
    my $msg = shift;
    my $indent = shift || 0;
 
-   esay($lvl, (scalar localtime) . ": " . " " x $indent . "$msg", 0);
+   esay($lvl, (scalar localtime) . "($lvl): " . " " x $indent . "$msg", 0);
 }
 
 # ---------------------------------------------------------------------------
