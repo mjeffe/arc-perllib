@@ -33,6 +33,7 @@ sub standardize_dobymd($);
 
 # globals
 my %opts = ();
+my @invalid_ssn_patterns = ();
 
 
 
@@ -44,8 +45,27 @@ sub init_standardizer(%) {
    %opts = %$href;
    #print "TOK INIT:\n" . Dumper(\%opts) . "\n";
    
-   # define the order of fields we expect to see in standardize_pii?
-   #
+   # ??? define the order of fields we expect to see in standardize_pii?
+
+   # define invalid ssn patterns
+   @invalid_ssn_patterns = (
+      qr/^[8-9]/,
+      qr/^000/,
+      qr/^[0-7][0-9][0-9]00/,
+      qr/^[0-7][0-9][0-9][0-9][0-9]0000/,
+      qr/0000000/,
+      qr/1111111/,
+      qr/2222222/,
+      qr/3333333/,
+      qr/4444444/,
+      qr/5555555/,
+      qr/6666666/,
+      qr/7777777/,
+      qr/8888888/,
+      qr/9999999/,
+      qr/1234567/,
+      qr/9876543/
+   );
 }
 
 
@@ -93,33 +113,42 @@ sub standardize_ssn($) {
    #my $valid = ( length($s) == 9 ) ? 1 : 0;
 
    $s =~ tr/ -//;             # strip any space or - characters
-   my $valid = 0;             # assume invalid
 
-   if (  length($s) == 9
-      && substr($s,0,1) != '8' 
-      && substr($s,0,1) != '9'
-      && substr($s,0,3) != '000'
-      && substr($s,3,2) != '00'
-      && substr($s,5,4) != '0000'
-   ) {
-      $valid = 1;
-   }
+   # look for invalid patterns
+   my $valid = 1;             # assume valid
 
-   # these are all 7 digis... is KIM's is_valid_ssn() function wrong?
-#   if    ( $s eq "0000000") { $valid = 0; }
-#   elsif ( $s eq "1111111") { $valid = 0; }
-#   elsif ( $s eq "2222222") { $valid = 0; }
-#   elsif ( $s eq "3333333") { $valid = 0; }
-#   elsif ( $s eq "4444444") { $valid = 0; }
-#   elsif ( $s eq "5555555") { $valid = 0; }
-#   elsif ( $s eq "6666666") { $valid = 0; }
-#   elsif ( $s eq "7777777") { $valid = 0; }
-#   elsif ( $s eq "8888888") { $valid = 0; }
-#   elsif ( $s eq "9999999") { $valid = 0; }
-#   elsif ( $s eq "1234567") { $valid = 0; }
-#   elsif ( $s eq "9876543") { $valid = 0; }
+#   if ( length($s) != 9 ) { $valid = 0; }
+#   if ( $s ~~ @invalid_ssn_patterns ) { $valid = 0 };   # smart match (perlfaq6: How do I efficiently match...)
+#                                                        # OR
+#   foreach my $pattern ( @invalid_ssn_patterns ) {      # match patterns in loop
+#      if ( $s =~ m/$pattern/ ) {
+#         $valid = 0;
+#         last;
+#      }
+#   }
+
+   # remarkably, this is about 2-4 times faster than using the precomplied
+   # @invalid_ssn_patterns techniques
+   if    ( length($s) != 9 ) { $valid = 0; }
+   elsif ( $s =~ m/0000000/) { $valid = 0; }
+   elsif ( $s =~ m/^[8-9]/ ) { $valid = 0; }
+   elsif ( $s =~ m/^000/   ) { $valid = 0; }
+   elsif ( $s =~ m/^[0-7][0-9][0-9]00/) { $valid = 0; }
+   elsif ( $s =~ m/^[0-7][0-9][0-9][0-9][0-9]0000/) { $valid = 0; }
+   elsif ( $s =~ m/1111111/) { $valid = 0; }
+   elsif ( $s =~ m/2222222/) { $valid = 0; }
+   elsif ( $s =~ m/3333333/) { $valid = 0; }
+   elsif ( $s =~ m/4444444/) { $valid = 0; }
+   elsif ( $s =~ m/5555555/) { $valid = 0; }
+   elsif ( $s =~ m/6666666/) { $valid = 0; }
+   elsif ( $s =~ m/7777777/) { $valid = 0; }
+   elsif ( $s =~ m/8888888/) { $valid = 0; }
+   elsif ( $s =~ m/9999999/) { $valid = 0; }
+   elsif ( $s =~ m/1234567/) { $valid = 0; }
+   elsif ( $s =~ m/9876543/) { $valid = 0; }
 
    #return ($valid, $s);
+   dbg(1, "Invalid SSN: $s\n") unless($valid);
    return $s;
 }
 
@@ -142,13 +171,9 @@ sub standardize_dobymd($) {
    #}
    #return $dt->ymd('');
 
-   #my ($sec, $min, $hour, $mday, $mon, $year, $wday, $yday) = POSIX::strptime("string", "Format");
    my ($sec, $min, $hour, $mday, $mon, $year, $wday, $yday) = POSIX::strptime($s, $opts{'dob-format'});
    if ( defined($year) && defined($mon) && defined($mday) ) {
       return sprintf("%d%02d%02d", $year+1900, $mon+1, $mday);
-      #my $d = sprintf("%d%02d%02d", $year+1900, $mon+1, $mday);
-      #print "PARSING: $s, GOT: $d\n";
-      #return $d;
    }
    
    print "$W: error parsing date ($s) on record $main::recid\n";
