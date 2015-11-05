@@ -23,13 +23,13 @@ use Crypt::CBC;
 #use Digest::SHA qw(sha512_hex);
 #use List::Util 'shuffle';
 use Data::Dumper;
-use ARC::Common qw($E $W dbg list_minus);
+use ARC::Common qw(dbg list_minus);
 
 # prototypes
 sub add_noise($);
 sub build_rmc_map();
 sub tok_encrypt_rmc($$$);
-sub tok_decrypt_rmc($);
+sub tok_decrypt_rmc($$);
 sub tok_encrypt_xo($);
 sub tok_decrypt_xo($);
 sub tok_encrypt_do($);
@@ -49,6 +49,8 @@ my %rmc_rmap = ();
 my $map_id = '';
 my $xo_cipher;
 my $do_cipher;
+my $E = "Tokenizer ERROR";
+my $W = "Tokenizer WARNING";
 
 our $VERSION = 0.1;
 
@@ -59,12 +61,14 @@ our $VERSION = 0.1;
 # ---------------------------------------------------------------------------
 sub init(%) {
    my ($href) = @_;
-   dbg(3, "Initializing Tokenizer...\n");
+   dbg(2, "Tokenizer init...\n");
 
    # document the options we expect and set defaults
    my %defaults = (
       'delimiter'       => '|', 
       'output-aric'     => 0,
+      'output-pii'      => 0,
+      'aric-map-id'     => '',
       'seperate-do'     => 0,
       'xo-do-delimiter' => 'h',
       'keys' => {
@@ -86,7 +90,7 @@ sub init(%) {
    # override defaults with input parms
    %opts = (%defaults, %$href);
    %{$opts{keys}} = (%{$defaults{keys}}, %{$href->{keys}});
-   dbg(3, "Tokenizer opts:\n".Dumper(\%opts)."\n");
+   dbg(4, "Tokenizer opts:\n".Dumper(\%opts)."\n");
 
    # generate a 16 byte Initialization Vector from "salt"
    $opts{'keys'}{'iv'} = substr(Digest::MD5::md5_hex($opts{keys}{xo_cipher_salt}), 0, 16)
@@ -104,6 +108,7 @@ sub init(%) {
    }
 
    # each token version has different options. Set those here
+   dbg(2, "setting token version specific options\n", 2);
    if ( $opts{keys}{xo_version} == 1 ) {
       die("$E: key file aric_cipher is wrong for this token version!\n") if ( lc($opts{keys}{aric_cipher}) ne 'rmc' );
       die("$E: rmc_salt is not defined in the key file!\n") if ( ! defined($opts{keys}{rmc_salt}) );
@@ -121,6 +126,7 @@ sub init(%) {
    # This could also be done in tokenize_strings() for greater randomness
    my @keys = keys %rmc_map;
    $map_id = $keys[int(rand(scalar @keys))];
+   dbg(3, "random map_id selected: ".$map_id."\n", 2);
 
    # pregenerate the token header
    #
@@ -134,9 +140,9 @@ sub init(%) {
    #   now this is unimplemented.
    #
    $opts{keys}{xo_header} = sprintf("%02X", $opts{keys}{xo_version}) . $map_id . $opts{keys}{aric_header_delimiter};
+   dbg(4, "XO header: ".$opts{keys}{xo_header}."\n", 2);
 
-   #print "ARC::Tokenizer init opts:\n" . Dumper(\%opts) . "\n";
-
+   dbg(2, "initializing CBC ciphers\n", 2);
    # generate the XO encryption cipher object
    $xo_cipher = Crypt::CBC->new(
       -key           => $opts{keys}{xo_cipher_key},
@@ -157,8 +163,6 @@ sub init(%) {
       #-iv            => $opts{keys}{iv},
       #-header        => 'none',
    );
-
-   dbg(4, "End Tokenizer::init_tokenizer(): OPTS:\n".Dumper(\%opts)."\n");
 }
 
 
@@ -201,7 +205,6 @@ sub tokenize_strings($$) {
 # See tokenize_strings() for token header notes
 # ---------------------------------------------------------------------------
 sub detokenize_strings($) {
-   #my ($arrayref) = @_;
    my ($token) = @_;
 
    # pull header from token and parse out it's two values
@@ -222,14 +225,30 @@ sub detokenize_strings($) {
    #my @arr = map { tok_decrypt_xo($_); } @$arrayref;
    my $aric = tok_decrypt_xo($xo);
 
-   # parse out the aric tokens
-   my @aric = split(quotemeta($opts{keys}{aric_token_delimiter}), $aric);
-   return @aric;
+   if ( $opts{'output-aric'} ) {
+      # retokenize
+      if ( ! $opts{'aric-map-id'} || $map_id eq $opts{'aric-map-id'} ) {
+         # no need, already in the requested map_id
+         return split(quotemeta($opts{keys}{aric_token_delimiter}), $aric);
+      }
+      my @aric = split(quotemeta($opts{keys}{aric_token_delimiter}), $aric);
+      my @ret = ();
+      foreach my $tkn ( @aric ) {
+         my ($fld, $t) = split(quotemeta($opts{keys}{aric_header_delimiter}), $tkn);
+         push(@ret, tok_encrypt_rmc(tok_decrypt_rmc($tkn, $map_id), $map_id, $fld));
+      }
+      return @ret;
+   } else {
+      return split(quotemeta($opts{keys}{aric_token_delimiter}), $aric);
+   }
 
    # decrypt aric tokens back to plaintext
-   #my @plaintext = map { tok_decrypt_rmc($_); } @aric;
+   if ( $opts{'output-pii'} ) {
+      return map { tok_decrypt_rmc($_, $map_id); } split(quotemeta($opts{keys}{aric_token_delimiter}), $aric);
+   }
 
-   #return @plaintext;
+   # should never get here
+   die("$E: detokenize_strings(): invalid set of options");
 }
 
 
@@ -237,17 +256,19 @@ sub detokenize_strings($) {
 # create RMC (Random Map Cipher) token
 # ---------------------------------------------------------------------------
 sub tok_encrypt_rmc($$$) {
-   my ($plaintext, $map_id, $fieldname) = @_;
+   my ($plaintext, $map_id, $fieldcode) = @_;
 
    # $map_id can also be generated here rather than init() for more randomness
 
    # token header format = FF:
    # where:
    #   FF   = field name code
-   my $token = $fieldname . $opts{keys}{aric_header_delimiter};
    # NOTE: output-aric is for debugging, so the map_id is included
+   my $token;
    if ( $opts{'output-aric'} ) {
-      $token = $fieldname . $map_id . $opts{keys}{aric_header_delimiter};
+      $token = $fieldcode . $map_id . $opts{keys}{aric_header_delimiter};
+   } else {
+      $token = $fieldcode . $opts{keys}{aric_header_delimiter};
    }
 
    # character by character, replace original with mapped value from map_id row
@@ -265,19 +286,13 @@ sub tok_encrypt_rmc($$$) {
 # 
 # See tok_encrypt_rmc() for more notes
 # ---------------------------------------------------------------------------
-sub tok_decrypt_rmc($) {
-   my ($token) = @_;
+sub tok_decrypt_rmc($$) {
+   my ($token, $map_id) = @_;
 
-   # pull header from token and parse out it's two values
-   my ($hdr, $tok) = split(quotemeta($opts{keys}{aric_header_delimiter}), $token);
-   my $map_version = hex(substr($hdr,0,2));  # first two bytes, in hex
-   my $map_id      = substr($hdr,2); # map key
-
-   if ( $map_version != $opts{keys}{xo_version} ) {
-      die("$E: Unable to decrypt token: xo_version missmatch.\n"
-         ."    key file xo_version = " . $opts{keys}{xo_version} 
-         . ", token xo_version = $map_version\n");
-   }
+   # pull field name header from token 
+   my ($fld, $tok) = split(quotemeta($opts{keys}{aric_header_delimiter}), $token);
+   #my $map_version = hex(substr($hdr,0,2));  # first two bytes, in hex
+   #my $map_id      = substr($hdr,2); # map key
 
    # length of rmc map id is the length strings it maps to or from
    my $len = length($map_id);
@@ -289,7 +304,6 @@ sub tok_decrypt_rmc($) {
    }
 
    return $plaintext;
-
 }
 
 
@@ -333,7 +347,6 @@ sub tok_decrypt_do($) {
 # Add more bytes to the noise map
 # ---------------------------------------------------------------------------
 sub add_noise($) {
-   dbg(4, "adding noise\n", 2);
    return Digest::SHA::sha512_hex($_[0]);
 }
 
@@ -344,7 +357,7 @@ sub add_noise($) {
 # multiple maps for each $len, which would give us much greater "randomness".
 # ---------------------------------------------------------------------------
 sub build_rmc_map() {
-   dbg(2, "Generating rmc maps\n");
+   dbg(2, "generating rmc maps\n", 2);
 
    ## default char_map max length
    #my $max_strlen = 4;
@@ -356,16 +369,17 @@ sub build_rmc_map() {
    # default to all 7-bit ASCII printable characters 
    # see http://perldoc.perl.org/perlrecharclass.html#POSIX-Character-Classes
    my @input_domain = ();
-   foreach my $chr ( map {chr} (0..127) ) {
-      #next if ( $chr =~ /[|\\]/ );  # exclude a few problematic characters
-      #push(@input_domain, $chr) if $chr =~ m/\p{XPosixPrint}/; # full range unicode (will work for > 127)
-      push(@input_domain, $chr) if $chr =~ m/[[:print:]]/;    # ascii range
-   }
    if ( defined($opts{keys}{rmc_input_domain}) ) {
       @input_domain = split('', $opts{keys}{rmc_input_domain});
+   } else {
+      foreach my $chr ( map {chr} (0..127) ) {
+         #next if ( $chr =~ /[|\\]/ );  # exclude a few problematic characters
+         #push(@input_domain, $chr) if $chr =~ m/\p{XPosixPrint}/; # full range unicode (will work for > 127)
+         push(@input_domain, $chr) if $chr =~ m/[[:print:]]/;    # ascii range
+      }
    }
-   dbg(3, scalar @input_domain . " characters in the input domain:\n", 2);
-   dbg(3, "input domain:--->" . join('',@input_domain) . "<---\n", 2);
+   dbg(4, scalar @input_domain . " characters in the input domain:\n", 4);
+   dbg(4, "input domain:--->" . join('',@input_domain) . "<---\n", 4);
 
    # Greg's input here! What is the minimum string length of output characters
    # that we need to represent every character in the input domain.
@@ -386,12 +400,12 @@ sub build_rmc_map() {
    $opts{keys}{do_pw_hash} = Digest::MD5::md5_hex($opts{keys}{do_cipher_key});
    my $i = 0;
    foreach my $len ($min_strlen .. $max_strlen) {
-      dbg(3, "building rmc map for len $len\n");
+      dbg(3, "building rmc map for len $len\n", 4);
 
       # generate bytes of predictable noise for this len
       my $pw_noise_key = substr($opts{keys}{do_pw_hash}, 0, $len);
       my $map_noise = add_noise($pw_noise_key . $opts{keys}{rmc_salt});
-      dbg(4, "map_noise[$pw_noise_key] (" . length($map_noise) . " bytes): $map_noise\n", 2);
+      dbg(5, "adding noise: map_noise[$pw_noise_key] (" . length($map_noise) . " bytes): $map_noise\n", 6);
 
       foreach my $c ( @input_domain ) {
          $map_noise .= add_noise($map_noise) if ( $i + $len > length($map_noise) );
@@ -403,13 +417,11 @@ sub build_rmc_map() {
          $rmc_rmap{$pw_noise_key}{$str} = $c;
          $rmc_map{$pw_noise_key}{$c} = $str;
       }
-      dbg(3, "  len $len: map_noise index = " . ($i + $len) . " out of " . length($map_noise) . "\n", 2);
+      dbg(4, "max map_noise index used = " . ($i + $len) . " out of " . length($map_noise) . "\n", 6);
       $i = 0;
    }
-   #print "MAP: " . Dumper(\%rmc_map);
-   #print "RMAP: " . Dumper(\%rmc_rmap);
-   #$opts{rmc_map} = \%rmc_map;
-   #$opts{rmc_rmap} = \%rmc_rmap;
+   dbg(5, "rmc_map:\n".Dumper(\%rmc_map)."\n", 4);
+   dbg(5, "rmc_rmap:\n".Dumper(\%rmc_rmap)."\n", 4);
 }
 
 # ---------------------------------------------------------------------------
