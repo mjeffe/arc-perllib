@@ -113,7 +113,7 @@ sub standardize_ssn($) {
    #$s =~ tr/[^0-9]//;        # strip any non numeric characters
    #my $valid = ( length($s) == 9 ) ? 1 : 0;
 
-   $s =~ tr/ -//;             # strip any space or - characters
+   $s =~ tr/- //d;             # strip any space or - characters
 
    # look for invalid patterns
    my $valid = 1;             # assume valid
