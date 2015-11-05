@@ -19,7 +19,7 @@ use strict;
 use warnings;
 use Crypt::OpenPGP;
 use Data::Dumper;
-use ARC::Common qw($E $W dbg prompt);
+use ARC::Common qw(dbg prompt);
 
 # prototypes
 sub parse_key_file($;$);
@@ -28,6 +28,8 @@ sub encrypt_key_file($);
 
 # globals
 #my %opts = ();
+my $E = "Keyfile ERROR";
+my $W = "Keyfile WARNING";
 
 our $VERSION = 0.1;
 
@@ -81,11 +83,11 @@ our $VERSION = 0.1;
 # ---------------------------------------------------------------------------
 sub parse_key_file($;$) {
    my ($keyfile, $passphrase) = @_;
-   dbg(3, "parsing key file $keyfile...\n");
 
    # set up parameters I will need when parsing key file
    my %keys = ();
    my $kf = decrypt_key_file($keyfile, $passphrase);
+   dbg(2, "parsing key file $keyfile...\n");
    my @kf = split("\n", $kf);
    foreach my $line (@kf) {
       next if $line =~ m/^\s*#/;   # ignore any comment lines
@@ -100,7 +102,7 @@ sub parse_key_file($;$) {
    # Do not check for required keys here, rather let each module that uses the
    # keyfile check for their own required parameters
 
-   dbg(3, "Keyfile keys:\n" . Dumper(\%keys));
+   dbg(4, "Keyfile keys:\n" . Dumper(\%keys));
    return \%keys;
 }
 
@@ -113,8 +115,8 @@ sub parse_key_file($;$) {
 # ---------------------------------------------------------------------------
 sub decrypt_key_file($;$) {
    my ($keyfile, $passphrase) = @_;
+   dbg(2, "decrypting key file $keyfile...\n");
 
-   dbg(3, "decrypting key file $keyfile...\n");
    my %args = (
       #Data        => $ciphertext,
       Filename    => $keyfile,
@@ -122,7 +124,6 @@ sub decrypt_key_file($;$) {
    if ( $passphrase ) {
       $args{Passphrase} = $passphrase;
    } else {
-      #$args{PassphraseCallback}  = \&pgp_passphrase_cb;
       $args{PassphraseCallback}  = sub { prompt("PEARL key file password:", 1); };
    }
 
@@ -135,7 +136,6 @@ sub decrypt_key_file($;$) {
          die "Decryption failed: ", $pgp->errstr unless $text;
       }
    }
-
    dbg(4, "contents of decoded key file:\n<<<BEGIN DECODED KEY FILE>>>\n$text\n<<<END DECODED KEY FILE>>>\n");
    return $text;
 }
