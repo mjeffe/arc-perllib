@@ -27,17 +27,19 @@ use ARC::Common qw(dbg list_minus);
 
 # prototypes
 sub add_noise($);
+sub add_rmc_map($);
 sub build_rmc_map();
+sub minlen_rmc_map_id();
+sub init(%);
+sub tokenize_strings($$);
+sub detokenize_strings($);
 sub tok_encrypt_rmc($$$);
 sub tok_decrypt_rmc($$);
 sub tok_encrypt_xo($);
 sub tok_decrypt_xo($);
 sub tok_encrypt_do($);
 sub tok_decrypt_do($);
-# exportable
-sub init(%);
-sub tokenize_strings($$);
-sub detokenize_strings($);
+
 # obsolete
 sub random_str($@);
 sub generate_map_table($$);
@@ -46,7 +48,7 @@ sub generate_map_table($$);
 my %opts = ();
 my %rmc_map = ();
 my %rmc_rmap = ();
-my $map_id = '';
+my $output_map_id = '';
 my $xo_cipher;
 my $do_cipher;
 my $E = "Tokenizer ERROR";
@@ -69,6 +71,7 @@ sub init(%) {
       'output-aric'     => 0,
       'output-pii'      => 0,
       'aric-map-id'     => '',
+      'do-based-aric'   => 0,
       'seperate-do'     => 0,
       'xo-do-delimiter' => 'h',
       'keys' => {
@@ -119,14 +122,21 @@ sub init(%) {
       die("$E: unknown xo_version\n");
    }
 
-   # build the in-memory rmc maps
-   build_rmc_map();
+   # default to all 7-bit ASCII printable characters 
+   # see http://perldoc.perl.org/perlrecharclass.html#POSIX-Character-Classes
+   unless( defined($opts{keys}{rmc_input_domain}) ) {
+      foreach my $chr ( map {chr} (0..127) ) {
+         #next if ( $chr =~ /[|\\]/ );  # exclude a few problematic characters
+         #push(@input_domain, $chr) if $chr =~ m/\p{XPosixPrint}/; # full range unicode (will work for > 127)
+         #push(@input_domain, $chr) if $chr =~ m/[[:print:]]/;    # ascii range
+         $opts{keys}{rmc_input_domain} .= $chr if $chr =~ m/[[:print:]]/;    # ascii range
+      }
+   }
+   dbg(4, length($opts{keys}{rmc_input_domain}) . " characters in the input domain:\n", 4);
+   dbg(4, "input domain:--->" . $opts{keys}{rmc_input_domain} . "<---\n", 4);
 
-   # pick a random map key to use for this instantiation
-   # This could also be done in tokenize_strings() for greater randomness
-   my @keys = keys %rmc_map;
-   $map_id = $keys[int(rand(scalar @keys))];
-   dbg(3, "random map_id selected: ".$map_id."\n", 2);
+   # build the in-memory rmc maps
+   build_rmc_maps();
 
    # pregenerate the token header
    #
@@ -139,7 +149,7 @@ sub init(%) {
    # NOTE: what follows aric version in the header, should be version dependent. For
    #   now this is unimplemented.
    #
-   $opts{keys}{xo_header} = sprintf("%02X", $opts{keys}{xo_version}) . $map_id . $opts{keys}{aric_header_delimiter};
+   $opts{keys}{xo_header} = sprintf("%02X", $opts{keys}{xo_version}).$output_map_id.$opts{keys}{aric_header_delimiter};
    dbg(4, "XO header: ".$opts{keys}{xo_header}."\n", 2);
 
    dbg(2, "initializing CBC ciphers\n", 2);
@@ -154,15 +164,17 @@ sub init(%) {
       -header        => 'none',
    );
 
-   $do_cipher = Crypt::CBC->new(
-      -key           => $opts{keys}{do_cipher_key},
-      -literal_key   => 0,  # treat -key as a passphrase, not the literal encryption key
-      -cipher        => $opts{keys}{do_cipher_algo},
-      #-salt          => $cipher_salt,
-      #-iv            => $opts{keys}{cipher_salt},
-      #-iv            => $opts{keys}{iv},
-      #-header        => 'none',
-   );
+   if ( $opts{keys}{do_cipher_key} ) {
+      $do_cipher = Crypt::CBC->new(
+         -key           => $opts{keys}{do_cipher_key},
+         -literal_key   => 0,  # treat -key as a passphrase, not the literal encryption key
+         -cipher        => $opts{keys}{do_cipher_algo},
+         #-salt          => $cipher_salt,
+         #-iv            => $opts{keys}{cipher_salt},
+         #-iv            => $opts{keys}{iv},
+         #-header        => 'none',
+      );
+   }
 }
 
 
@@ -181,7 +193,7 @@ sub tokenize_strings($$) {
    #my @arr = map { tok_encrypt_rmc($_, $map_id); } @$strs_ref;
    my @arr = ();
    for (my $i = 0; $i < scalar @$strs_ref; $i++ ) {
-      push(@arr, tok_encrypt_rmc($strs_ref->[$i], $map_id, substr($flds_ref->[$i],0,2)));
+      push(@arr, tok_encrypt_rmc($strs_ref->[$i], $output_map_id, substr($flds_ref->[$i],0,2)));
    }
    if ( $opts{'output-aric'} ) { return @arr; }
 
@@ -235,7 +247,7 @@ sub detokenize_strings($) {
       my @ret = ();
       foreach my $tkn ( @aric ) {
          my ($fld, $t) = split(quotemeta($opts{keys}{aric_header_delimiter}), $tkn);
-         push(@ret, tok_encrypt_rmc(tok_decrypt_rmc($tkn, $map_id), $map_id, $fld));
+         push(@ret, tok_encrypt_rmc(tok_decrypt_rmc($tkn, $map_id), $output_map_id, $fld));
       }
       return @ret;
    } else {
@@ -266,6 +278,7 @@ sub tok_encrypt_rmc($$$) {
    # NOTE: output-aric is for debugging, so the map_id is included
    my $token;
    if ( $opts{'output-aric'} ) {
+      # OJO: ! ! ! This need to go away - should only have one style rmc token
       $token = $fieldcode . $map_id . $opts{keys}{aric_header_delimiter};
    } else {
       $token = $fieldcode . $opts{keys}{aric_header_delimiter};
@@ -293,6 +306,8 @@ sub tok_decrypt_rmc($$) {
    my ($fld, $tok) = split(quotemeta($opts{keys}{aric_header_delimiter}), $token);
    #my $map_version = hex(substr($hdr,0,2));  # first two bytes, in hex
    #my $map_id      = substr($hdr,2); # map key
+
+   add_rmc_map($map_id) unless ( $rmc_map{$map_id} );
 
    # length of rmc map id is the length strings it maps to or from
    my $len = length($map_id);
@@ -351,77 +366,98 @@ sub add_noise($) {
 }
 
 # ---------------------------------------------------------------------------
+# Generate the map and reverse map for a given map_id, and add them to the map
+# tables. The map is a HoH data structure where: 
+#  map_id => {
+#     input_domain character => map string (n bytes long)   # for maps
+#     OR
+#     map string (n bytes long) => input domain character   # for reverse maps
+#  }
+# ---------------------------------------------------------------------------
+sub add_rmc_map($) {
+   my ($map_id) = @_;
+   dbg(2, "generating rmc map for $map_id\n", 4);
+   if ( $rmc_map{$map_id} ) {
+      dbg(2, "rmc map for $map_id already exists, skipping...\n", 2);
+      return;
+   }
+
+   my $len = length($map_id);
+   if ( $len < minlen_rmc_map_id() ) {
+      die("$E: unable to represent all intput domain characters with the\n"
+        . "current output domain, using map_id of length $len\n");
+   }
+
+   # generate bytes of predictable noise for this map_id
+   my $map_noise = add_noise($map_id . $opts{keys}{rmc_salt});
+   dbg(5, "adding noise: map_noise[$map_id] (" . length($map_noise) . " bytes): $map_noise\n", 6);
+
+   my $i = 0;
+   foreach my $c ( split('', $opts{keys}{rmc_input_domain}) ) {
+      $map_noise .= add_noise($map_noise) if ( $i + $len > length($map_noise) );
+      my $str = substr($map_noise, $i++, $len);
+      until ( ! exists($rmc_rmap{$map_id}{$str}) ) {
+         $map_noise .= add_noise($map_noise) if ( $i + $len > length($map_noise) );
+         $str = substr($map_noise, $i++, $len) 
+      }
+      $rmc_rmap{$map_id}{$str} = $c;
+      $rmc_map{$map_id}{$c} = $str;
+   }
+   dbg(4, "max map_noise index used = " . ($i + $len) . " out of " . length($map_noise) . "\n", 6);
+   dbg(5, "rmc_map{$map_id}:\n".Dumper($rmc_map{$map_id})."\n");
+   dbg(5, "rmc_rmap{$map_id}:\n".Dumper($rmc_rmap{$map_id})."\n");
+}
+
+# ---------------------------------------------------------------------------
 # Build the in-memory random map dictionary
 #
 # Currently we generate one map for each $len. We could however, generate
 # multiple maps for each $len, which would give us much greater "randomness".
 # ---------------------------------------------------------------------------
-sub build_rmc_map() {
+sub build_rmc_maps() {
    dbg(2, "generating rmc maps\n", 2);
+ 
+   if ( $opts{'aric-map-id'} ) {
+      # we have been asked to build a specific map
+      add_rmc_map($opts{'aric-map-id'});
+      $output_map_id = $opts{'aric-map-id'};
+   }
+   elsif ( $opts{'do-based-aric'} ) {
+      # DO does not trust XO, generate random maps based on DO password
+      my $pw_hash = Digest::MD5::md5_hex($opts{keys}{do_cipher_key});
 
-   ## default char_map max length
-   #my $max_strlen = 4;
-   #if ( defined($opts{keys}{rmc_max_char_map_length}) ) {
-   #   $max_strlen = int($opts{keys}{rmc_max_char_map_length});
-   #}
-   my $max_strlen = int($opts{keys}{rmc_max_char_map_length});
-
-   # default to all 7-bit ASCII printable characters 
-   # see http://perldoc.perl.org/perlrecharclass.html#POSIX-Character-Classes
-   my @input_domain = ();
-   if ( defined($opts{keys}{rmc_input_domain}) ) {
-      @input_domain = split('', $opts{keys}{rmc_input_domain});
-   } else {
-      foreach my $chr ( map {chr} (0..127) ) {
-         #next if ( $chr =~ /[|\\]/ );  # exclude a few problematic characters
-         #push(@input_domain, $chr) if $chr =~ m/\p{XPosixPrint}/; # full range unicode (will work for > 127)
-         push(@input_domain, $chr) if $chr =~ m/[[:print:]]/;    # ascii range
+      # generate a series of maps
+      my $min_strlen = minlen_rmc_map_id();
+      my $max_strlen = int($opts{keys}{rmc_max_char_map_length});
+      foreach my $len ($min_strlen .. $max_strlen) {
+         dbg(3, "building rmc map for len $len\n", 4);
+         add_rmc_map(substr($pw_hash, 0, $len));
       }
+
+      # pick a random map_id to use
+      my @keys = keys %rmc_map;
+      $output_map_id = $keys[int(rand(scalar @keys))];
    }
-   dbg(4, scalar @input_domain . " characters in the input domain:\n", 4);
-   dbg(4, "input domain:--->" . join('',@input_domain) . "<---\n", 4);
-
-   # Greg's input here! What is the minimum string length of output characters
-   # that we need to represent every character in the input domain.
-   #my $min_strlen = POSIX::ceil(log(scalar(@input_domain))/log(scalar(@output_domain)));
-   my $min_strlen = POSIX::ceil(log(scalar(@input_domain))/log(16));  # assume all 16 hex chars will be in map_noise
-   if ( $max_strlen < $min_strlen ) {
-      die("$E: unable to represent all intput domain characters with the\n"
-        . "current output domain, using a max length of $max_strlen\n");
+   else {
+      # default is to use XO password, and minimum length
+      my $pw_hash = Digest::MD5::md5_hex($opts{keys}{xo_cipher_key});
+      $output_map_id = substr($pw_hash, 0, minlen_rmc_map_id());
+      add_rmc_map($output_map_id);
    }
 
-   # generate the map and reverse map
-   # the map is a HoH data structure where: 
-   #  substr of the DO password hash (n bytes long) => {
-   #     input_domain character => map string (n bytes long)   # for maps
-   #     OR
-   #     map string (n bytes long) => input domain character   # for reverse maps
-   #  }
-   $opts{keys}{do_pw_hash} = Digest::MD5::md5_hex($opts{keys}{do_cipher_key});
-   my $i = 0;
-   foreach my $len ($min_strlen .. $max_strlen) {
-      dbg(3, "building rmc map for len $len\n", 4);
+   dbg(2, "output map_id selected for this run: ".$output_map_id."\n", 2);
+   dbg(5, "rmc_map:\n".Dumper(\%rmc_map)."\n");
+   dbg(5, "rmc_rmap:\n".Dumper(\%rmc_rmap)."\n");
+}
 
-      # generate bytes of predictable noise for this len
-      my $pw_noise_key = substr($opts{keys}{do_pw_hash}, 0, $len);
-      my $map_noise = add_noise($pw_noise_key . $opts{keys}{rmc_salt});
-      dbg(5, "adding noise: map_noise[$pw_noise_key] (" . length($map_noise) . " bytes): $map_noise\n", 6);
-
-      foreach my $c ( @input_domain ) {
-         $map_noise .= add_noise($map_noise) if ( $i + $len > length($map_noise) );
-         my $str = substr($map_noise, $i++, $len);
-         until ( ! exists($rmc_rmap{$pw_noise_key}{$str}) ) {
-            $map_noise .= add_noise($map_noise) if ( $i + $len > length($map_noise) );
-            $str = substr($map_noise, $i++, $len) 
-         }
-         $rmc_rmap{$pw_noise_key}{$str} = $c;
-         $rmc_map{$pw_noise_key}{$c} = $str;
-      }
-      dbg(4, "max map_noise index used = " . ($i + $len) . " out of " . length($map_noise) . "\n", 6);
-      $i = 0;
-   }
-   dbg(5, "rmc_map:\n".Dumper(\%rmc_map)."\n", 4);
-   dbg(5, "rmc_rmap:\n".Dumper(\%rmc_rmap)."\n", 4);
+# ---------------------------------------------------------------------------
+# Greg's input here! What is the minimum string length of output domain
+# characters that we need to represent every character in the input domain.
+#
+# Note: we assume output domain is hex (16 distinct characters)
+# ---------------------------------------------------------------------------
+sub minlen_rmc_map_id() {
+   return POSIX::ceil(log(length($opts{keys}{rmc_input_domain}))/log(16));
 }
 
 # ---------------------------------------------------------------------------
