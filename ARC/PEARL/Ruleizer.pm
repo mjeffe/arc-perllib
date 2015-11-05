@@ -21,7 +21,7 @@ our @EXPORT_OK = qw(init);
 use strict;
 use warnings;
 use Data::Dumper;
-use ARC::Common qw($E $W dbg);
+use ARC::Common qw(dbg);
 
 # prototypes
 # exportable
@@ -30,6 +30,8 @@ sub add_rules($);
 
 # globals
 my %opts = ();
+my $E = "Ruleizer ERROR";
+my $W = "Ruleizer WARNING";
 
 our $VERSION = 0.1;
 
