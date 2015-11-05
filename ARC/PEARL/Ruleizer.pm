@@ -41,7 +41,7 @@ our $VERSION = 0.1;
 sub init(%) {
    my ($href) = @_;
    %opts = %$href;
-   dbg(3, "Ruleizer init...\n");
+   dbg(2, "Ruleizer init...\n");
 }
 
 
