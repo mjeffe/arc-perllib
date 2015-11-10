@@ -1,10 +1,15 @@
 # ---------------------------------------------------------------------------
 # $Id$
 # 
-# This module encapsulates functionality around using PEARL encrypted tokens.
-# It can generate tokens from input data, output PII from tokens, output RMC
-# tokens from tokens or standardize all input tokens to a single RMC token id.
+# This module encapsulates functionality for manipulating PEARL encrypted tokens.
 #
+# The API is not all that I hope for. It's a little inconsistent about what
+# is input and what is returned. I would like to clean it up if we have time...
+#
+# TERMINOLOGY:
+#
+#   token               : encrypted data stored in a specialized format which contains metadata
+#   encrypted string    : a string of data as output from the encryption function
 # ---------------------------------------------------------------------------
 
 package ARC::PEARL::Tokenizer;
@@ -12,11 +17,13 @@ require Exporter;
 
 # export functions and variables
 our @ISA = qw(Exporter);
-our @EXPORT = qw(tok_init tokenize_strings detokenize);
-our @EXPORT_OK = qw(tok_get_output_map_id tok_get_layout
-      tok_tokenize_xo tok_detokenize_xo tok_tokenize_aric tok_detokenize_aric retokenize_aric
-      encrypt_rmc decrypt_rmc encrypt_do decrypt_do
-      encrypt_xo decrypt_xo 
+#our @EXPORT = qw(tok_init tok_tokenize);
+
+# The idea is that tok_ functions are intended to be public
+our @EXPORT_OK = qw(tok_init tok_get_output_map_id tok_get_layout
+      tok_tokenize      tok_tokenize_aric   encrypt_rmc encrypt_do encrypt_xo
+      tok_detokenize_xo tok_detokenize_aric decrypt_rmc decrypt_do decrypt_xo
+                        tok_retokenize_aric 
 );
 
 use strict;
@@ -35,8 +42,12 @@ sub add_rmc_map($);
 sub build_rmc_map();
 sub minlen_rmc_map_id();
 sub tok_init(%);
-sub tokenize_strings($$);
-sub detokenize($);
+sub tok_get_output_map_id();
+sub tok_get_layout();
+sub tok_tokenize($$);
+sub tok_detokenize_xo($;$);
+sub tok_retokenize_aric($$$);
+sub aric_tokens_to_layout($);
 sub tok_tokenize_aric($$$);
 sub encrypt_rmc($$);
 sub decrypt_rmc($$);
@@ -44,14 +55,8 @@ sub encrypt_xo($);
 sub decrypt_xo($);
 sub encrypt_do($);
 sub decrypt_do($);
-#
-sub tok_aric_str_to_array($);
-sub tok_get_output_map_id();
-sub tok_get_layout();
-sub tok_detokenize_xo($;$);
-sub retokenize_aric($$$);
-
 # obsolete
+#sub detokenize($);
 sub random_str($@);
 sub generate_map_table($$);
 
@@ -81,8 +86,8 @@ sub tok_init(%) {
    # document the options we expect and set defaults
    my %defaults = (
       'delimiter'       => '|', 
-      'output-aric'     => 0,
-      'output-pii'      => 0,
+      'output-aric'     => 0,   # could eliminate this by adding a parameter to tok_tokenize() ???
+      'output-pii'      => 0,   # could definitely eliminate this if we eliminate detokenize()
       'aric-map-id'     => '',
       'encrypt-do'      => 0,
       'seperate-do'     => 0,
@@ -202,6 +207,19 @@ sub tok_init(%) {
    }
 }
 
+# ---------------------------------------------------------------------------
+# return the output_map_id as defined during init()
+# ---------------------------------------------------------------------------
+sub tok_get_output_map_id() {
+   return $output_map_id;
+}
+
+# ---------------------------------------------------------------------------
+# return the output layout
+# ---------------------------------------------------------------------------
+sub tok_get_layout() {
+   return @layout_fields;
+}
 
 # ---------------------------------------------------------------------------
 # tokenzie every string in the array
@@ -211,7 +229,7 @@ sub tok_init(%) {
 #
 # OJO: we could generate map_id here for greater randomness
 # ---------------------------------------------------------------------------
-sub tokenize_strings($$) {
+sub tok_tokenize($$) {
    my ($strs_ref, $flds_ref) = @_;
 
    # generate aric tokens (currently using RMC)
@@ -232,126 +250,34 @@ sub tokenize_strings($$) {
    if ( $opts{'seperate-do'} ) {
       return ($xo, encrypt_do(join($opts{delimiter}, @$strs_ref)));
    }
-
    return ($xo . $opts{'xo-do-delimiter'} . encrypt_do(join($opts{delimiter}, @$strs_ref)));
 }
 
 # ---------------------------------------------------------------------------
-# OJO: I don't like this function. It has too many possible outputs. It's too
-# generic and unclear what it's purpose is. Need to rethink.
+# Rearange aric tokens into the output layout. Strips field name code header
 #
-# decrypt/unwrap the token back to the requested state (aric, pii, etc)
-# Always returns an array of pii or aric tokens
+# $_[0]  = array ref of aric tokens
 #
-# See tokenize_strings() for token header notes
+# returns an array of aric encrypted strings NOT tokens!
 # ---------------------------------------------------------------------------
-sub detokenize($) {
-   my ($token) = @_;
-
-   # pull header from token and parse out it's two values
-   my ($hdr, $tok) = split(quotemeta($opts{keys}{aric_header_delimiter}), $token);
-   my $map_version = hex(substr($hdr,0,2));  # first two bytes, in hex
-   my $map_id      = substr($hdr,2); # map key
-
-   if ( $map_version != $opts{keys}{xo_version} ) {
-      die("$E: Unable to decrypt token: xo_version missmatch.\n"
-         ."    key file xo_version = " . $opts{keys}{xo_version} 
-         . ", token xo_version = $map_version\n");
-   }
-
-   # seperate xo and do tokens
-   my ($xo, $do) = split($opts{'xo-do-delimiter'}, $tok);
-
-   # aric will now take off the XO armor
-   my $aric = decrypt_xo($xo);
-
-   if ( $opts{'output-aric'} ) {
-      # retokenize
-      if ( ! $opts{'aric-map-id'} || $map_id eq $opts{'aric-map-id'} ) {
-         # no need, already in the requested map_id
-         return split(quotemeta($opts{keys}{aric_token_delimiter}), $aric);
-      }
-      my @aric = split(quotemeta($opts{keys}{aric_token_delimiter}), $aric);
-      my @ret = ();
-      foreach my $tkn ( @aric ) {
-         my ($fld, $t) = split(quotemeta($opts{keys}{aric_header_delimiter}), $tkn);
-         push(@ret, tok_tokenize_aric(decrypt_rmc($tkn, $map_id), $output_map_id, $fld));
-      }
-      return @ret;
-   } else {
-      return split(quotemeta($opts{keys}{aric_token_delimiter}), $aric);
-   }
-
-   # decrypt aric tokens back to plaintext
-   if ( $opts{'output-pii'} ) {
-      return map { decrypt_rmc($_, $map_id); } split(quotemeta($opts{keys}{aric_token_delimiter}), $aric);
-   }
-
-   # should never get here
-   die("$E: detokenize(): invalid set of options");
-}
-
-# ---------------------------------------------------------------------------
-# return the output_map_id as defined during init()
-# ---------------------------------------------------------------------------
-sub tok_get_output_map_id() {
-   return $output_map_id;
-}
-
-# ---------------------------------------------------------------------------
-# return the output layout
-# ---------------------------------------------------------------------------
-sub tok_get_layout() {
-   return @layout_fields;
-}
-
-# ---------------------------------------------------------------------------
-# split an aric token string into an array of aric tokens, in the output layout order
-#
-# $_[0]  = aric token string (what comes out of decrypt_xo()
-# ---------------------------------------------------------------------------
-sub aric_token_str_to_array($) {
+sub aric_tokens_to_layout($) {
    my @ret = ();
 
-   foreach ( split(quotemeta($opts{keys}{aric_token_delimiter}), $_[0]) ) {
-      my ($code, $tok) = split(quotemeta($opts{keys}{aric_header_delimiter}), $_);
+   my $d = quotemeta($opts{keys}{aric_header_delimiter});
+   foreach my $t ( @{$_[0]} ) {
+      my ($code, $tok) = split($d, $t);
       $ret[$layout_codes_to_pos{$code}] = $tok;
    }
    return @ret;
 }
 
 # ---------------------------------------------------------------------------
-# re-encrypt aric token from map_id to new_map_id
-#
-# $_[0]  = aric token
-# $_[1]  = from_map_id
-# $_[2]  = to_map_id
-# ---------------------------------------------------------------------------
-sub retokenize_aric($$$) {
-   return encrypt_rmc(decrypt_rmc($_, $_[1]), $_[2]);
-}
-
-# ---------------------------------------------------------------------------
 # decrypt/unwrap the XO token back to the ARIC tokens
 #
 # $_[0]  = xo token
-# $_[1]  = true|FALSE (optional) if true, do not reformat into init() defined layout
+# $_[1]  = true|FALSE : true = return raw aric tokens, false = return aric strings in layout order
 #
-# ! ! ! NOTE: ! ! ! !
-# By default, tokens are STRIPPED of their field name codes and reordered into the
-# output layout order. IF $_[1] is TRUE, then the field name codes are left on the
-# tokens, and they are returned in their existing order. 
-#
-# SO, if $_[1] is FALSE, what you get back is:
-#
-#  (c0c8c8a6c009c0c0,a6c8966f09c009966f,e14d4fb3,d67b893e)
-#
-# BUT, if $_[1] is TRUE, what you get back is:
-#
-#  (c0c8c8a6c009c0c0,a6c8966f09c009966f,e14d4fb3,d67b893e)
-#
-# Not a great interface... but my justification is better performance. Need to
-# profile to see if it's worth it.
+# returns array : (map_version, map_id, @aric_tokens)
 # ---------------------------------------------------------------------------
 sub tok_detokenize_xo($;$) {
 
@@ -370,12 +296,17 @@ sub tok_detokenize_xo($;$) {
    my ($xo, $do) = split($opts{'xo-do-delimiter'}, $tok);
 
    # aric will now take off the XO armor
-   #my $aric = decrypt_xo($xo);
-
-   if ( $_[1] ) {  # if $dump_aric - just dump the tokens
-      return (($map_version, $map_id), split(quotemeta($opts{keys}{aric_token_delimiter}), decrypt_xo($xo)));
+   if ( $_[1] ) { # return raw tokens in current order
+      return (
+         ($map_version, $map_id), 
+         split(quotemeta($opts{keys}{aric_token_delimiter}), decrypt_xo($xo)) 
+      );
+   } else { # return aric strings in layout order
+      return (
+         ($map_version, $map_id), 
+         aric_tokens_to_layout([split(quotemeta($opts{keys}{aric_token_delimiter}), decrypt_xo($xo))]) 
+      );
    }
-   return (($map_version, $map_id), aric_token_str_to_array(decrypt_xo($xo)));
 }
 
 # ---------------------------------------------------------------------------
@@ -384,6 +315,8 @@ sub tok_detokenize_xo($;$) {
 # $_[0]  = plaintext
 # $_[1]  = map_id
 # $_[2]  = field code (fn for fname, etc)
+#
+# returns aric token
 # ---------------------------------------------------------------------------
 sub tok_tokenize_aric($$$) {
    #my ($plaintext, $map_id, $fieldcode) = @_;
@@ -401,61 +334,73 @@ sub tok_tokenize_aric($$$) {
 }
 
 # ---------------------------------------------------------------------------
-# create RMC (Random Map Cipher) token
+# re-encrypt aric encrypted string from map_id to new_map_id
+#
+# $_[0]  = aric encrypted string
+# $_[1]  = from_map_id
+# $_[2]  = to_map_id
+# ---------------------------------------------------------------------------
+sub tok_retokenize_aric($$$) {
+   return encrypt_rmc(decrypt_rmc($_, $_[1]), $_[2]);
+}
+
+# ---------------------------------------------------------------------------
+# Unencrypt ARIC token
+#
+# $_[0]  = aric token
+# $_[1]  = map_id
+#
+# returns array: (field_name_code, plaintext)
+# ---------------------------------------------------------------------------
+sub tok_detokenize_aric($$) {
+   my ($fld, $tok) = split(quotemeta($opts{keys}{aric_header_delimiter}), $_[0]);
+   return ($fld, (decrypt_rmc($tok, $_[1])));
+}
+
+
+# ---------------------------------------------------------------------------
+# create RMC (Random Map Cipher) encrypted string
 #
 # NOTE: $map_id can also be generated here rather than init() for more randomness
 #
 # $_[0]  = plaintext
 # $_[1]  = map_id
+#
+# returns rmc encrypted string
 # ---------------------------------------------------------------------------
 sub encrypt_rmc($$) {
-   #my ($plaintext, $map_id) = @_;
-   my $token = '';
+   my $enc = '';
 
    add_rmc_map($_[1]) unless ( $rmc_map{$_[1]} );
 
    # character by character, replace original with mapped value from map_id row
    foreach my $c ( split('', uc($_[0])) ) {
       # TODO: Need to print the record this is from to log file and warn that character $c was dropped
-      $token .= $rmc_map{$_[1]}{$c} || '';  # drop character if not found in map
+      $enc .= $rmc_map{$_[1]}{$c} || '';  # drop character if not found in map
    }
 
-   return $token;
-}
-
-# ---------------------------------------------------------------------------
-# Unencrypt ARIC token
-#
-# $_[0]  = token
-# $_[1]  = map_id
-# ---------------------------------------------------------------------------
-sub tok_detokenize_aric($$) {
-   # pull field name header from token 
-   my ($fld, $tok) = split(quotemeta($opts{keys}{aric_header_delimiter}), $_[0]);
-   return ($fld, (decrypt_rmc($tok, $_[1])));
+   return $enc;
 }
 
 
-
 # ---------------------------------------------------------------------------
-# unencrypt RMC token (Random Map Cipher)
+# unencrypt RMC (Random Map Cipher) encrypted string
 # 
-# $_[0]  = token
+# $_[0]  = rmc encrypted string
 # $_[1]  = map_id
+#
+# returns plaintext
 # ---------------------------------------------------------------------------
 sub decrypt_rmc($$) {
-   #my ($token, $map_id) = @_;
-
    add_rmc_map($_[1]) unless ( $rmc_map{$_[1]} );
 
    # length of rmc map id is the length strings it maps to or from
-   # chunk up the string into equal parts of $len lengh, and decode each
    my $len = length($_[1]);
 
    # surprisingly, this does not profile any faster
    #return join("", map {$rmc_rmap{$_[1]}{$_}} unpack("(a$len)*", $_[0]));
 
-   # chunk the string into equal parts of $len length
+   # chunk up the string into equal parts of $len lengh, and decode each
    my $plaintext = "";
    foreach my $chunk ( unpack("(a$len)*", $_[0]) ) {
       $plaintext .= $rmc_rmap{$_[1]}{"$chunk"}; 
@@ -506,6 +451,16 @@ sub decrypt_do($) {
 # ---------------------------------------------------------------------------
 sub add_noise($) {
    return Digest::SHA::sha512_hex($_[0]);
+}
+
+# ---------------------------------------------------------------------------
+# Greg's input here! What is the minimum string length of output domain
+# characters that we need to represent every character in the input domain.
+#
+# Note: we assume output domain is hex (16 distinct characters)
+# ---------------------------------------------------------------------------
+sub minlen_rmc_map_id() {
+   return POSIX::ceil(log(length($opts{keys}{rmc_input_domain}))/log(16));
 }
 
 # ---------------------------------------------------------------------------
@@ -593,28 +548,15 @@ sub build_rmc_maps() {
    dbg(5, "rmc_rmap:\n".Dumper(\%rmc_rmap)."\n");
 }
 
-# ---------------------------------------------------------------------------
-# Greg's input here! What is the minimum string length of output domain
-# characters that we need to represent every character in the input domain.
+
+
+
+
+
 #
-# Note: we assume output domain is hex (16 distinct characters)
-# ---------------------------------------------------------------------------
-sub minlen_rmc_map_id() {
-   return POSIX::ceil(log(length($opts{keys}{rmc_input_domain}))/log(16));
-}
+# ========================= POSSIBILITIES TO ELIMINATE ======================
+#
 
-# ---------------------------------------------------------------------------
-# Geneate a random string from the passed in domain of characters
-# ---------------------------------------------------------------------------
-sub random_str($@) {
-   my ($len, @domain) = @_;
-
-   my $str;
-   for (0 .. $len - 1) {
-      $str .= $domain[int(rand(scalar(@domain)))];
-   }
-   return $str;
-}
 
 
 
@@ -666,6 +608,114 @@ sub generate_map_table($$) {
    }
 }
 
+
+
+# ---------------------------------------------------------------------------
+# Geneate a random string from the passed in domain of characters
+# ---------------------------------------------------------------------------
+sub random_str($@) {
+   my ($len, @domain) = @_;
+
+   my $str;
+   for (0 .. $len - 1) {
+      $str .= $domain[int(rand(scalar(@domain)))];
+   }
+   return $str;
+}
+
+
+
+# ---------------------------------------------------------------------------
+# split an aric token string into an array of aric tokens, in the output layout order
+#
+# $_[0]  = aric token string (what comes out of decrypt_xo()
+# $_[1]  = true|FALSE (optional) if true, do not reformat into init() defined layout
+#
+# ! ! ! NOTE: ! ! ! !
+# By default, tokens are STRIPPED of their field name codes and reordered into the
+# output layout order. IF $_[1] is TRUE, then the field name codes are left on the
+# tokens, and they are returned in their existing order. 
+#
+# SO, if $_[1] is FALSE, what you get back is:
+#
+#  (c0c8c8a6c009c0c0,a6c8966f09c009966f,e14d4fb3,d67b893e)
+#
+# BUT, if $_[1] is TRUE, what you get back is:
+#
+#  (fn:c0c8c8a6c009c0c0,ln:a6c8966f09c009966f,do:e14d4fb3,ss:d67b893e)
+#
+# Not a great interface... but my justification is better performance. Need to
+# profile to see if it's worth it.
+# ---------------------------------------------------------------------------
+sub aric_token_str_to_array($;$) {
+   my @ret = ();
+
+   foreach ( split(quotemeta($opts{keys}{aric_token_delimiter}), $_[0]) ) {
+      if ( $_[1] ) {
+         push(@ret, $_);
+      } else {
+         my ($code, $tok) = split(quotemeta($opts{keys}{aric_header_delimiter}), $_);
+         $ret[$layout_codes_to_pos{$code}] = $tok;
+      }
+   }
+   return @ret;
+}
+
+
+# ---------------------------------------------------------------------------
+# OJO: I don't like this function. It has too many possible outputs. It's too
+# generic and unclear what it's purpose is. Need to rethink.
+#
+# decrypt/unwrap the token back to the requested state (aric, pii, etc)
+# Always returns an array of pii or aric tokens
+#
+# See tok_tokenize() for token header notes
+# ---------------------------------------------------------------------------
+sub detokenize($) {
+   my ($token) = @_;
+
+   # pull header from token and parse out it's two values
+   my ($hdr, $tok) = split(quotemeta($opts{keys}{aric_header_delimiter}), $token);
+   my $map_version = hex(substr($hdr,0,2));  # first two bytes, in hex
+   my $map_id      = substr($hdr,2); # map key
+
+   if ( $map_version != $opts{keys}{xo_version} ) {
+      die("$E: Unable to decrypt token: xo_version missmatch.\n"
+         ."    key file xo_version = " . $opts{keys}{xo_version} 
+         . ", token xo_version = $map_version\n");
+   }
+
+   # seperate xo and do tokens
+   my ($xo, $do) = split($opts{'xo-do-delimiter'}, $tok);
+
+   # aric will now take off the XO armor
+   my $aric = decrypt_xo($xo);
+
+   if ( $opts{'output-aric'} ) {
+      # retokenize
+      if ( ! $opts{'aric-map-id'} || $map_id eq $opts{'aric-map-id'} ) {
+         # no need, already in the requested map_id
+         return split(quotemeta($opts{keys}{aric_token_delimiter}), $aric);
+      }
+      my @aric = split(quotemeta($opts{keys}{aric_token_delimiter}), $aric);
+      my @ret = ();
+      foreach my $tkn ( @aric ) {
+         my ($fld, $t) = split(quotemeta($opts{keys}{aric_header_delimiter}), $tkn);
+         push(@ret, tok_tokenize_aric(decrypt_rmc($tkn, $map_id), $output_map_id, $fld));
+      }
+      return @ret;
+   } else {
+      return split(quotemeta($opts{keys}{aric_token_delimiter}), $aric);
+   }
+
+   # decrypt aric tokens back to plaintext
+   if ( $opts{'output-pii'} ) {
+      return map { decrypt_rmc($_, $map_id); } split(quotemeta($opts{keys}{aric_token_delimiter}), $aric);
+   }
+
+   # should never get here
+   die("$E: detokenize(): invalid set of options");
+}
 
 
 1;
