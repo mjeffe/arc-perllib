@@ -28,8 +28,6 @@ use warnings;
 use Data::Dumper;
 
 # prototypes
-sub load_config($);
-sub save_config($$);
 sub load($);
 sub save($$;$$);
 
@@ -42,10 +40,10 @@ sub save($$;$$);
 #    http://www.perlmonks.org/?node_id=464358
 #
 # Anything loaded from the config file that does not have a namespace defined,
-# will end up in the KIM::Config namespace and can be referenced from the
+# will end up in the ARC::Config namespace and can be referenced from the
 # calling program like this:
 #
-#   $KIM::Config::somevar.
+#   $ARC::Config::somevar.
 #
 # For example, if the config file contains:
 #
@@ -67,7 +65,7 @@ sub save($$;$$);
 #     'save_state'   => 'TRUE'
 #   };
 #   
-# Now, once load_config($file) has been called, the calling program can
+# Now, once ARC::Config::load($file) has been called, the calling program can
 # reference it's config like this:
 #
 #   %scores = %ARC::Config::SCORES;
