@@ -20,7 +20,7 @@ our @ISA = qw(Exporter);
 #our @EXPORT = qw(tok_init tok_tokenize);
 
 # The idea is that tok_ functions are intended to be public
-our @EXPORT_OK = qw(tok_init tok_get_output_map_id tok_get_layout
+our @EXPORT_OK = qw(tok_init tok_get_output_map_id tok_get_layout aric_char_to_map
       tok_tokenize      tok_tokenize_aric   encrypt_rmc encrypt_do encrypt_xo
       tok_detokenize_xo tok_detokenize_aric decrypt_rmc decrypt_do decrypt_xo
                         tok_retokenize_aric 
@@ -44,6 +44,7 @@ sub minlen_rmc_map_id();
 sub tok_init(%);
 sub tok_get_output_map_id();
 sub tok_get_layout();
+sub aric_char_to_map($$);
 sub tok_tokenize($$);
 sub tok_detokenize_xo($;$);
 sub tok_retokenize_aric($$$);
@@ -222,6 +223,19 @@ sub tok_get_layout() {
 }
 
 # ---------------------------------------------------------------------------
+# convert a character to it's equivalent map string, for the given map_id
+#
+# $_[0]  = character
+# $_[1]  = map_id
+#
+# returns the aric map equivalent for the character
+# ---------------------------------------------------------------------------
+sub aric_char_to_map($$) {
+   add_rmc_map($_[1]) unless ( $rmc_map{$_[1]} );
+   return $rmc_map{$_[1]}{$_[0]} || '';  # drop character if not found in map
+}
+
+# ---------------------------------------------------------------------------
 # tokenzie every string in the array
 #
 #  strs_ref       : array ref of strings
@@ -354,6 +368,7 @@ sub tok_retokenize_aric($$$) {
 # ---------------------------------------------------------------------------
 sub tok_detokenize_aric($$) {
    my ($fld, $tok) = split(quotemeta($opts{keys}{aric_header_delimiter}), $_[0]);
+   die("$E: invalid aric token\n") unless ( $fld && $tok );
    return ($fld, (decrypt_rmc($tok, $_[1])));
 }
 
@@ -408,7 +423,6 @@ sub decrypt_rmc($$) {
    return $plaintext;
 
 }
-
 
 
 # ---------------------------------------------------------------------------
