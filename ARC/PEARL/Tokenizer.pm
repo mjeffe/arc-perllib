@@ -249,7 +249,7 @@ sub tok_tokenize($$) {
    # generate aric tokens (currently using RMC)
    #my @arr = map { encrypt_rmc($_, $map_id); } @$strs_ref;
    my @arr = ();
-   for (my $i = 0; $i < scalar @$strs_ref; $i++ ) {
+   for (my $i = 0; $i < scalar @$flds_ref; $i++ ) {
       push(@arr, tok_tokenize_aric($strs_ref->[$i], $output_map_id, substr($flds_ref->[$i],0,2)));
    }
    if ( $opts{'output-aric'} ) { return @arr; }
@@ -388,10 +388,12 @@ sub encrypt_rmc($$) {
 
    add_rmc_map($_[1]) unless ( $rmc_map{$_[1]} );
 
-   # character by character, replace original with mapped value from map_id row
-   foreach my $c ( split('', uc($_[0])) ) {
-      # TODO: Need to print the record this is from to log file and warn that character $c was dropped
-      $enc .= $rmc_map{$_[1]}{$c} || '';  # drop character if not found in map
+   if ( $_[0] ) {
+      # character by character, replace original with mapped value from map_id row
+      foreach my $c ( split('', uc($_[0])) ) {
+         # TODO: Need to print the record this is from to log file and warn that character $c was dropped
+         $enc .= $rmc_map{$_[1]}{$c} || '';  # drop character if not found in map
+      }
    }
 
    return $enc;
