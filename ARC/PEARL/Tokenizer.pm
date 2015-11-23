@@ -28,9 +28,10 @@ our @EXPORT_OK = qw(tok_init tok_get_output_map_id tok_get_layout aric_char_to_m
 
 use strict;
 use warnings;
-use Crypt::CBC;
+use Crypt::GCrypt;
+#use Crypt::CBC;
 #use Digest;
-#use Digest::MD5 qw(md5_hex);
+use Digest::MD5 qw(md5_hex);
 #use Digest::SHA qw(sha512_hex);
 #use List::Util 'shuffle';
 use Data::Dumper;
@@ -176,27 +177,16 @@ sub tok_init(%) {
       unless( $opts{'keys'}{'iv'} );
 
    # generate the XO encryption cipher object
-   $xo_cipher = Crypt::CBC->new(
-      -key           => $opts{keys}{xo_cipher_key},
-      -literal_key   => 0,  # treat -key as a passphrase, not the literal encryption key
-      #-cipher        => $opts{keys}{xo_cipher_algo},
-      -cipher        => "Crypt::OpenSSL::AES",
-      #-salt          => $cipher_salt,
-      #-iv            => $opts{keys}{cipher_salt},
-      -iv            => $opts{keys}{iv},
-      -header        => 'none',
+   $xo_cipher = Crypt::GCrypt->new(
+      type        => 'cipher',
+      algorithm   => 'aes256',
+      mode        => 'cbc',
    );
-
    if ( $opts{keys}{do_cipher_key} ) {
-      $do_cipher = Crypt::CBC->new(
-         -key           => $opts{keys}{do_cipher_key},
-         -literal_key   => 0,  # treat -key as a passphrase, not the literal encryption key
-         #-cipher        => $opts{keys}{do_cipher_algo},
-         -cipher        => "Crypt::OpenSSL::AES",
-         #-salt          => $cipher_salt,
-         #-iv            => $opts{keys}{cipher_salt},
-         #-iv            => $opts{keys}{iv},
-         #-header        => 'none',
+      $do_cipher = Crypt::GCrypt->new(
+         type        => 'cipher',
+         algorithm   => 'aes256',
+         mode        => 'cbc',
       );
    }
 
@@ -431,10 +421,21 @@ sub decrypt_rmc($$) {
 
 # ---------------------------------------------------------------------------
 # create XO (eXecution Owner) token 
+#
 # $_[0]     = plaintext
+#
+# returns:  encrypted text
 # ---------------------------------------------------------------------------
 sub encrypt_xo($) {
-   return $xo_cipher->encrypt_hex($_[0]);
+   my $ct = '';
+   $xo_cipher->start('encrypting');
+   $xo_cipher->setkey($opts{keys}{xo_cipher_key});
+   $xo_cipher->setiv($opts{keys}{iv});
+   $ct = $xo_cipher->encrypt($_[0]);
+   $ct .= $xo_cipher->finish();
+
+   # return as hex
+   return unpack('H*', $ct);
 }
 
 
@@ -443,7 +444,14 @@ sub encrypt_xo($) {
 # $_[0]     = ciphertext
 # ---------------------------------------------------------------------------
 sub decrypt_xo($) {
-   return $xo_cipher->decrypt_hex($_[0]);
+   my $pt = '';
+   $xo_cipher->start('decrypting');
+   $xo_cipher->setkey($opts{keys}{xo_cipher_key});
+   $xo_cipher->setiv($opts{keys}{iv});
+   $pt = $xo_cipher->decrypt(pack('H*', $_[0]));
+   $pt .= $xo_cipher->finish();
+
+   return $pt
 }
 
 # ---------------------------------------------------------------------------
@@ -451,7 +459,15 @@ sub decrypt_xo($) {
 # $_[0]     = plaintext
 # ---------------------------------------------------------------------------
 sub encrypt_do($) {
-   return $do_cipher->encrypt_hex($_[0]);
+   my $ct = '';
+   $do_cipher->start('encrypting');
+   $do_cipher->setkey($opts{keys}{do_cipher_key});
+   $do_cipher->setiv($opts{keys}{iv});
+   $ct = $do_cipher->encrypt($_[0]);
+   $ct .= $do_cipher->finish();
+
+   # return as hex
+   return unpack('H*', $ct);
 }
 
 
@@ -460,7 +476,14 @@ sub encrypt_do($) {
 # $_[0]     = ciphertext
 # ---------------------------------------------------------------------------
 sub decrypt_do($) {
-   return $do_cipher->decrypt_hex($_[0]);
+   my $pt = '';
+   $do_cipher->start('decrypting');
+   $do_cipher->setkey($opts{keys}{do_cipher_key});
+   $do_cipher->setiv($opts{keys}{iv});
+   $pt = $do_cipher->decrypt(pack('H*', $_[0]));
+   $pt .= $do_cipher->finish();
+
+   return $pt
 }
 
 
