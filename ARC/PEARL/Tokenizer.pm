@@ -179,7 +179,8 @@ sub tok_init(%) {
    $xo_cipher = Crypt::CBC->new(
       -key           => $opts{keys}{xo_cipher_key},
       -literal_key   => 0,  # treat -key as a passphrase, not the literal encryption key
-      -cipher        => $opts{keys}{xo_cipher_algo},
+      #-cipher        => $opts{keys}{xo_cipher_algo},
+      -cipher        => "Crypt::OpenSSL::AES",
       #-salt          => $cipher_salt,
       #-iv            => $opts{keys}{cipher_salt},
       -iv            => $opts{keys}{iv},
@@ -190,7 +191,8 @@ sub tok_init(%) {
       $do_cipher = Crypt::CBC->new(
          -key           => $opts{keys}{do_cipher_key},
          -literal_key   => 0,  # treat -key as a passphrase, not the literal encryption key
-         -cipher        => $opts{keys}{do_cipher_algo},
+         #-cipher        => $opts{keys}{do_cipher_algo},
+         -cipher        => "Crypt::OpenSSL::AES",
          #-salt          => $cipher_salt,
          #-iv            => $opts{keys}{cipher_salt},
          #-iv            => $opts{keys}{iv},
