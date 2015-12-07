@@ -100,10 +100,10 @@ sub standardize_name($) {
    #  tr// is more efficient than s// so use when possible
    #  tr// does not interpolate regexes (except the - range operator)
    my $str = uc($s);                # to upper case
-   $str =~ tr/A-Z ()\/,-//cd;       # drop everything not in list (alphas and a few special chars)
-   $str =~ tr/()\/,/ /;             # convert special chars to space
-   $str =~ s/\s*-\s+|\s+-\s*/ /g;   # convert - to space, unless it is in a word
-   $str =~ tr/ / /s;                # collapse any white space into a single space
+   $str =~ tr/A-Z ()\/,-/ /c;       # convert everything not in list to space
+   $str =~ tr/()\/,/ /;             # convert special word separating chars to space
+   $str =~ s/^-|\s-|-\s|-$/ /g;     # convert - to space, unless it is in a word
+   $str =~ tr/ / /s;                # collapse multiple spaces into a single space
    $str =~ s/^\s+|\s+$//;           # trim leading and trailing space
 
    return $str;
