@@ -88,14 +88,22 @@ sub standardize_pii($) {
 
 # ---------------------------------------------------------------------------
 # standardize name (first or last) fields
+#
+# Essentially, drop everything non-alpha with a few exceptions
+# The special list of chars are preserved as spaces since they are important
+# word separators.
 # ---------------------------------------------------------------------------
 sub standardize_name($) {
    my ($s) = @_;
 
-   my $str = uc($s);
-   $str =~ tr/()\/,/ /;             # convert specific chars to space
+   # Note:
+   #  tr// is more efficient than s// so use when possible
+   #  tr// does not interpolate regexes (except the - range operator)
+   my $str = uc($s);                # to upper case
+   $str =~ tr/A-Z ()\/,-//cd;       # drop everything not in list (alphas and a few special chars)
+   $str =~ tr/()\/,/ /;             # convert special chars to space
    $str =~ s/\s*-\s+|\s+-\s*/ /g;   # convert - to space, unless it is in a word
-   $str =~ s/\s+/ /g;               # collapse any white space into a single space
+   $str =~ tr/ / /s;                # collapse any white space into a single space
    $str =~ s/^\s+|\s+$//;           # trim leading and trailing space
 
    return $str;
@@ -172,6 +180,7 @@ sub standardize_dobymd($) {
    #}
    #return $dt->ymd('');
 
+   # can handle dates from the year 0000 - 9999
    my ($sec, $min, $hour, $mday, $mon, $year, $wday, $yday) = POSIX::strptime($s, $opts{'dob-format'});
    if ( defined($year) && defined($mon) && defined($mday) ) {
       return sprintf("%d%02d%02d", $year+1900, $mon+1, $mday);
