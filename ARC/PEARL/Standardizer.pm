@@ -113,7 +113,8 @@ sub standardize_name($) {
 # ---------------------------------------------------------------------------
 # standardize SSN
 #
-# returns 2 element array: (is_valid_flag, standardized_ssn)
+# returns starndardized ssn.
+# For now, we just warn about invalid ssn
 # ---------------------------------------------------------------------------
 sub standardize_ssn($) {
    my ($s) = @_;
@@ -138,26 +139,33 @@ sub standardize_ssn($) {
 
    # remarkably, this is about 2-4 times faster than using the precomplied
    # @invalid_ssn_patterns techniques
+
+   # may want to just comment this out as it's a little bogus to do this before is_fake_ssn...
+   # is_valid()
    if    ( length($s) != 9 ) { $valid = 0; }
-   elsif ( $s =~ m/0000000/) { $valid = 0; }
+   elsif ( $s !~ m/^\d+$/  ) { $valid = 0; }  # if not all digits
    elsif ( $s =~ m/^[8-9]/ ) { $valid = 0; }
    elsif ( $s =~ m/^000/   ) { $valid = 0; }
    elsif ( $s =~ m/^[0-7][0-9][0-9]00/) { $valid = 0; }
    elsif ( $s =~ m/^[0-7][0-9][0-9][0-9][0-9]0000/) { $valid = 0; }
-   elsif ( $s =~ m/1111111/) { $valid = 0; }
-   elsif ( $s =~ m/2222222/) { $valid = 0; }
-   elsif ( $s =~ m/3333333/) { $valid = 0; }
-   elsif ( $s =~ m/4444444/) { $valid = 0; }
-   elsif ( $s =~ m/5555555/) { $valid = 0; }
-   elsif ( $s =~ m/6666666/) { $valid = 0; }
-   elsif ( $s =~ m/7777777/) { $valid = 0; }
-   elsif ( $s =~ m/8888888/) { $valid = 0; }
-   elsif ( $s =~ m/9999999/) { $valid = 0; }
-   elsif ( $s =~ m/1234567/) { $valid = 0; }
-   elsif ( $s =~ m/9876543/) { $valid = 0; }
+
+   esay(1, "$W: invalid ssn($s) on record $main::recid\n") unless($valid);
+
+   # is_fake_ssn()
+      if ( $s =~ m/0000000/) { return ''; }
+   elsif ( $s =~ m/1111111/) { return ''; }
+   elsif ( $s =~ m/2222222/) { return ''; }
+   elsif ( $s =~ m/3333333/) { return ''; }
+   elsif ( $s =~ m/4444444/) { return ''; }
+   elsif ( $s =~ m/5555555/) { return ''; }
+   elsif ( $s =~ m/6666666/) { return ''; }
+   elsif ( $s =~ m/7777777/) { return ''; }
+   elsif ( $s =~ m/8888888/) { return ''; }
+   elsif ( $s =~ m/9999999/) { return ''; }
+   elsif ( $s =~ m/1234567/) { return ''; }
+   elsif ( $s =~ m/9876543/) { return ''; }
 
    #return ($valid, $s);
-   esay(1, "$W: invalid ssn($s) on record $main::recid\n") unless($valid);
    return $s;
 }
 
