@@ -92,6 +92,11 @@ sub standardize_pii($) {
 # Essentially, drop everything non-alpha with a few exceptions
 # The special list of chars are preserved as spaces since they are important
 # word separators.
+#
+# BUGS:
+#  - a rule order bug allows "AB-.CD" to standardize to "AB-CD", but should
+#    ideally standardize to "AB CD" since the "-" in this case is probably
+#    not a legitimate hyphenated name.
 # ---------------------------------------------------------------------------
 sub standardize_name($) {
    my ($s) = @_;
@@ -100,7 +105,7 @@ sub standardize_name($) {
    #  tr// is more efficient than s// so use when possible
    #  tr// does not interpolate regexes (except the - range operator)
    my $str = uc($s);                # to upper case
-   $str =~ tr/A-Z ()\/,-/ /c;       # convert everything not in list to space
+   $str =~ tr/A-Z ()\/,-//cd;       # drop everything not in list
    $str =~ tr/()\/,/ /;             # convert special word separating chars to space
    $str =~ s/^-|\s-|-\s|-$/ /g;     # convert - to space, unless it is in a word
    $str =~ tr/ / /s;                # collapse multiple spaces into a single space
